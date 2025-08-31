@@ -23,6 +23,7 @@ class AdminStates(StatesGroup):
     add_asic_hashrate = State()
     add_asic_power = State()
     add_asic_price = State()
+    add_asic_get_coin = State()
     edit_coin_price = State()
     algo_default_coin = State()
     algo_difficulty = State()
@@ -42,7 +43,6 @@ class Admin:
         self.dp.message(Command("admin"))(self.admin_menu)
         self.dp.callback_query(F.data == "admin_menu")(self.admin_menu)
 
-        # Рассылка
         self.dp.callback_query(F.data == "broadcast_start")(self.broadcast_start)
         self.dp.message(AdminStates.broadcast_text)(self.broadcast_text)
         self.dp.message(AdminStates.broadcast_photo, F.content_type == "photo")(
@@ -52,7 +52,6 @@ class Admin:
             self.broadcast_no_photo
         )
 
-        # Обработчики кнопки "Назад" во время рассылки
         self.dp.callback_query(F.data == "admin_menu", AdminStates.broadcast_photo)(
             self.admin_menu_from_broadcast
         )
@@ -60,7 +59,6 @@ class Admin:
             self.admin_menu_from_broadcast
         )
 
-        # ASIC
         self.dp.callback_query(F.data == "manage_asic")(self.manage_asic)
         self.dp.callback_query(F.data == "add_asic")(self.add_asic_start)
         self.dp.callback_query(F.data.startswith("manufacturer:"))(
@@ -73,14 +71,13 @@ class Admin:
         self.dp.message(AdminStates.add_asic_hashrate)(self.add_asic_hashrate)
         self.dp.message(AdminStates.add_asic_power)(self.add_asic_power)
         self.dp.message(AdminStates.add_asic_price)(self.add_asic_price)
+        self.dp.message(AdminStates.add_asic_get_coin)(self.add_asic_get_coin)
         self.dp.callback_query(F.data.startswith("delete_asic:"))(self.delete_asic)
 
-        # Coins
         self.dp.callback_query(F.data == "manage_coins")(self.manage_coins)
         self.dp.callback_query(F.data.startswith("edit_coin:"))(self.edit_coin_start)
         self.dp.message(AdminStates.edit_coin_price)(self.edit_coin_price)
 
-        # Algorithms
         self.dp.callback_query(F.data == "manage_algorithms")(self.manage_algorithms)
         self.dp.callback_query(F.data.startswith("edit_algo:"))(self.edit_algo_start)
         self.dp.message(AdminStates.algo_default_coin)(self.edit_algo_coin)
@@ -88,7 +85,6 @@ class Admin:
         self.dp.message(AdminStates.algo_network)(self.edit_algo_network)
         self.dp.message(AdminStates.algo_reward)(self.edit_algo_reward)
 
-        # Photo from users
         self.dp.message(F.content_type == "photo", lambda m: m.chat.type == "private")(
             self.handle_user_photo
         )
@@ -111,7 +107,6 @@ class Admin:
         else:
             await event.answer(text, reply_markup=kb)
 
-    # ---------- Рассылка ----------
     async def broadcast_start(self, call: types.CallbackQuery, state: FSMContext):
         await call.message.edit_text("📢 Введите текст рассылки:")
         await state.set_state(AdminStates.broadcast_text)
@@ -180,7 +175,6 @@ class Admin:
         await state.clear()
         await self.admin_menu(call)
 
-    # ---------- ASIC ----------
     async def manage_asic(self, call: types.CallbackQuery):
         models = await self.calc_req.get_all_asic_models()
         kb = await AdminKB.list_asic(models)
@@ -235,6 +229,17 @@ class Admin:
     async def add_asic_price(self, message: types.Message, state: FSMContext):
         try:
             price = float(message.text.replace(",", "."))
+            await state.update_data(price_usd=price)
+            await message.answer(
+                "💰 Введите добываемые монеты (через пробел, например: BTC ETH):"
+            )
+            await state.set_state(AdminStates.add_asic_get_coin)
+        except ValueError:
+            await message.answer("❌ Введите число")
+
+    async def add_asic_get_coin(self, message: types.Message, state: FSMContext):
+        try:
+            get_coin = message.text.upper()
             data = await state.get_data()
             await self.calc_req.add_asic_model(
                 name=data["name"],
@@ -242,9 +247,10 @@ class Admin:
                 algorithm=Algorithm[data["algorithm"]],
                 hash_rate=data["hash_rate"],
                 power_consumption=data["power"],
-                price_usd=price,
+                price_usd=data["price_usd"],
+                get_coin=get_coin,
             )
-            await message.answer("✅ ASIC добавлен")
+            await message.answer("✅ ASIC добавлен с информацией о добываемых монетах")
             await state.clear()
             await self.admin_menu(message)
         except Exception as e:
@@ -256,7 +262,6 @@ class Admin:
         await call.answer("✅ ASIC удалён")
         await self.manage_asic(call)
 
-    # ---------- Coins ----------
     async def manage_coins(self, call: types.CallbackQuery):
         coins = await self.coin_req.get_all_coins()
         kb = await AdminKB.list_coins(coins)
@@ -279,7 +284,6 @@ class Admin:
         except ValueError:
             await message.answer("❌ Введите число")
 
-    # ---------- Algorithms ----------
     async def manage_algorithms(self, call: types.CallbackQuery):
         algos = await self.calc_req.get_algorithm_data_all()
         kb = await AdminKB.list_algorithms(algos)
@@ -331,12 +335,10 @@ class Admin:
         except ValueError:
             await message.answer("❌ Введите число")
 
-    # ---------- Фото от пользователей ----------
     async def handle_user_photo(self, message: types.Message):
-        # Проверяем, находится ли пользователь в состоянии рассылки
         current_state = await self.settings.dp.current_state().get_state()
         if current_state == AdminStates.broadcast_photo.state:
-            return  # Пропускаем обработку, так как это фото для рассылки
+            return
 
         if self.is_admin(message.from_user.id):
             return

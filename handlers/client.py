@@ -14,11 +14,9 @@ from signature import Settings
 from utils.ai_service import ask_ishushka, create_chat
 from utils.states import BetterPriceState, CalculatorState, FreeAiState, SellForm
 
-# словарь user_id -> conversation_id
 user_chats: Dict[int, str] = {}
 
 
-# Фильтр для канала
 class ChannelFilter(Filter):
     def __init__(self, channel_id: int):
         self.channel_id = channel_id
@@ -40,17 +38,14 @@ class Client:
         self.latest_price_link = None
 
     async def register_handlers(self):
-        # команды
         self.dp.message(Command("start"))(self.start_handler)
         self.dp.message(Command("sell"))(self.sell_start_handler)
         self.dp.message(Command("by"))(self.by_handler)
 
-        # обработчик сообщений из канала
         self.dp.channel_post(ChannelFilter(-1002725954632))(
             self.channel_message_handler
         )
 
-        # кнопки главного меню
         self.dp.callback_query(F.data == "back_main")(self.start_handler)
         self.dp.callback_query(F.data == "calc_income")(self.calc_income_handler)
         self.dp.callback_query(F.data == "price_list")(self.price_list_handler)
@@ -60,7 +55,6 @@ class Client:
         self.dp.callback_query(F.data == "calc_coins")(self.calc_coins_handler)
         self.dp.callback_query(F.data == "notify_toggle")(self.notify_toggle_handler)
 
-        # «Хочу другую цену» (новый поток)
         self.dp.callback_query(F.data == "better_price")(self.better_price_handler)
         self.dp.message(
             BetterPriceState.waiting_photo,
@@ -75,11 +69,9 @@ class Client:
             BetterPriceState.waiting_confirm,
         )(self.confirm_better_price)
 
-        # AI
         self.dp.callback_query(F.data == "ai_consult")(self.ai_consult_start)
         self.dp.message(FreeAiState.chat)(self.ai_chat_handler)
 
-        # калькулятор
         self.dp.callback_query(F.data.startswith("calc_method:"))(
             self.calc_method_handler
         )
@@ -110,43 +102,39 @@ class Client:
         )
         self.dp.callback_query(F.data == "calc_rub")(self.calc_rub_handler)
 
-        # состояния калькулятора
         self.dp.message(CalculatorState.input_electricity_price)(
             self.calc_electricity_handler
         )
         self.dp.message(CalculatorState.input_hashrate)(self.calc_hashrate_handler)
         self.dp.message(CalculatorState.input_power)(self.calc_power_handler)
 
-        # продажа
         self.dp.message(SellForm.device)(self.sell_device_handler)
         self.dp.message(SellForm.price)(self.sell_price_handler)
         self.dp.message(SellForm.condition)(self.sell_condition_handler)
         self.dp.message(SellForm.description)(self.sell_description_handler)
         self.dp.message(SellForm.contact)(self.sell_contact_handler)
 
-    # ---------- ОБРАБОТЧИК СООБЩЕНИЙ ИЗ КАНАЛА ----------
+        self.dp.callback_query(F.data.startswith("devices_page:"))(
+            self.devices_page_handler
+        )
+
     async def channel_message_handler(self, message: types.Message):
-        """Обработчик сообщений из канала для поиска актуального прайса"""
         try:
             if message.text and "АКТУАЛЬНЫЙ ПРАЙС" in message.text.upper():
-                # Получаем информацию о канале и сообщении
                 channel_username = message.chat.username
                 message_id = message.message_id
 
-                # Формируем ссылку
                 if message.chat.username:
                     link = f"https://t.me/{channel_username}/{message_id}"
                 else:
                     id_channel = f"{message.chat.id}"
                     link = f"https://t.me/c/{id_channel.split('-100')[1]}/{message_id}"
-                # Сохраняем ссылку
                 await self.calculator_req.update_link(link)
                 print(f"Обнаружен актуальный прайс: {link}")
 
         except Exception as e:
             print(f"Ошибка при обработке сообщения из канала: {e}")
 
-    # ---------- START ----------
     async def start_handler(
         self, message: types.Message | types.CallbackQuery, state: FSMContext
     ):
@@ -157,7 +145,7 @@ class Client:
             try:
                 await message.answer()
             except TelegramBadRequest:
-                pass  # Игнорируем устаревшие callback queries
+                pass
         else:
             user = message.from_user
             message_obj = message
@@ -170,7 +158,7 @@ class Client:
             "Я AI-консультант по майнингу криптовалют. "
             "Помогу рассчитать доходность, подобрать оборудование и ответить на все вопросы."
         )
-        photo = "https://i.imgur.com/8JZ9r8V.jpeg"
+        photo = "https://i.yapx.ru/aaABM.png"
         kb = await ClientKB.main_menu()
 
         if isinstance(message, types.CallbackQuery):
@@ -183,7 +171,6 @@ class Client:
                 chat_id=user.id, photo=photo, caption=text, reply_markup=kb
             )
 
-    # ---------- INCOME ----------
     async def calc_income_handler(self, call: types.CallbackQuery, state: FSMContext):
         await state.clear()
         await call.message.delete()
@@ -198,7 +185,6 @@ class Client:
 
     async def price_list_handler(self, call: types.CallbackQuery):
         try:
-            # Сначала проверяем сохраненную ссылку
             link = await self.calculator_req.get_link()
             if link:
                 await call.message.answer(
@@ -243,7 +229,12 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    async def calc_chars_handler(self, call: types.CallbackQuery):
+    async def calc_chars_handler(
+        self, call: types.CallbackQuery, state: FSMContext = None
+    ):
+        if state:
+            await state.clear()
+
         devices = await self.calculator_req.get_all_asic_models()
         if not devices:
             await call.message.edit_text("❌ Нет данных об оборудовании")
@@ -253,21 +244,44 @@ class Client:
                 pass
             return
 
-        message = "📊 Характеристики оборудования:\n\n"
-        for device in devices:
+        await state.update_data(all_devices=devices, current_page=0)
+        await self.show_devices_page(call, devices, 0)
+
+    async def show_devices_page(
+        self, call: types.CallbackQuery, devices: list, page: int
+    ):
+        items_per_page = 8
+        total_pages = (len(devices) + items_per_page - 1) // items_per_page
+
+        start_idx = page * items_per_page
+        end_idx = min(start_idx + items_per_page, len(devices))
+        current_devices = devices[start_idx:end_idx]
+
+        message = f"📊 Характеристики оборудования (стр. {page + 1}/{total_pages}):\n\n"
+        for device in current_devices:
             message += (
                 f"🏷️ {device.manufacturer.value} {device.name}\n"
                 f"   ⚙️ Алгоритм: {device.algorithm.value}\n"
                 f"   ⚡ Хешрейт: {device.hash_rate} {'TH/s' if device.hash_rate > 1 else 'GH/s'}\n"
                 f"   🔌 Потребление: {device.power_consumption}W\n"
                 f"   💰 Цена: ${device.price_usd}\n"
+                f"   🪙 Добывает: {device.get_coin if device.get_coin else 'Не указано'}\n"
                 "━━━━━━━━━━━━━━━━━━━━━━━━\n\n"
             )
-        await call.message.edit_text(message, reply_markup=await ClientKB.calc_menu())
+
+        kb = await ClientKB.devices_pagination(page, total_pages)
+        await call.message.edit_text(message, reply_markup=kb)
         try:
             await call.answer()
         except TelegramBadRequest:
             pass
+
+    async def devices_page_handler(self, call: types.CallbackQuery, state: FSMContext):
+        page = int(call.data.split(":")[1])
+        data = await state.get_data()
+        devices = data["all_devices"]
+        await state.update_data(current_page=page)
+        await self.show_devices_page(call, devices, page)
 
     async def calc_coins_handler(self, call: types.CallbackQuery):
         coins = await self.coin_req.get_all_coins()
@@ -308,7 +322,6 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    # ---------- "Хочу другую цену" (FSM) ----------
     async def better_price_handler(self, call: types.CallbackQuery, state: FSMContext):
         await call.message.delete()
         await self.bot.send_message(
@@ -389,7 +402,6 @@ class Client:
         else:
             await message.answer("❌ Руководство по б/у устройствам пока не доступно")
 
-    # ---------- SELL ----------
     async def sell_start_handler(self, message: types.Message, state: FSMContext):
         devices = await self.calculator_req.get_all_asic_models()
         if not devices:
@@ -470,7 +482,6 @@ class Client:
         await message.answer(response_message, reply_markup=await ClientKB.main_menu())
         await state.clear()
 
-    # ---------- CALCULATOR ----------
     async def calc_method_handler(self, call: types.CallbackQuery, state: FSMContext):
         method = call.data.split(":")[1]
         await state.update_data(calc_method=method)
@@ -716,14 +727,13 @@ class Client:
 
         text = MiningCalculator.format_result_rub(result, coin_symbol)
         await call.message.edit_text(
-            text, reply_markup=await CalculatorKB.result_menu_rub()  # ← Изменено здесь
+            text, reply_markup=await CalculatorKB.result_menu_rub()
         )
         try:
             await call.answer()
         except TelegramBadRequest:
             pass
 
-    # ---------- НАЗАД ----------
     async def back_calc_method_handler(
         self, call: types.CallbackQuery, state: FSMContext
     ):
@@ -753,9 +763,7 @@ class Client:
     ):
         data = await state.get_data()
 
-        # Проверяем, какой метод расчета используется
         if data.get("calc_method") != "asic":
-            # Если это не ASIC расчет, возвращаем к выбору алгоритма
             await call.message.edit_text(
                 "⚙️ Выберите алгоритм для расчета:",
                 reply_markup=await CalculatorKB.choose_algorithm(),
@@ -766,7 +774,6 @@ class Client:
                 pass
             return
 
-        # Только для ASIC расчета получаем manufacturer
         if "manufacturer" not in data:
             await call.message.edit_text(
                 "⚙️ Выберите способ расчета:",
@@ -814,7 +821,6 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    # ---------- AI ----------
     async def ai_consult_start(self, call: types.CallbackQuery, state: FSMContext):
         uid = call.from_user.id
         if uid not in user_chats:
@@ -839,7 +845,6 @@ class Client:
         except TelegramBadRequest:
             pass
 
-    # client.py - обновить ai_chat_handler
     async def ai_chat_handler(self, message: types.Message, state: FSMContext):
         uid = message.from_user.id
         conv_id = user_chats[uid]
@@ -847,7 +852,6 @@ class Client:
         asics = await self.calculator_req.get_all_asic_models()
         coins = await self.coin_req.get_all_coins()
 
-        # Более детальная информация об устройствах
         context = {
             "asic_models": [
                 {

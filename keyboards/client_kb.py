@@ -3,7 +3,6 @@ from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
 class ClientKB:
-    # кнопка «Назад» для AI-чата
     @staticmethod
     async def back_ai() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
@@ -54,8 +53,28 @@ class ClientKB:
             "🔔 Уведомления выкл" if notifications_enabled else "🔔 Уведомления вкл"
         )
         builder.button(text=status_text, callback_data="notify_toggle")
-        builder.button(text="📢 Перейти в канал", url="https://t.me/your_channel")
+        builder.button(text="📢 Перейти в канал", url="https://t.me/asic_plus")
         builder.button(text="💸 Хочу другую цену", callback_data="better_price")
         builder.button(text="🔙 Назад", callback_data="back_main")
         builder.adjust(1)
+        return builder.as_markup()
+
+    @staticmethod
+    async def devices_pagination(
+        current_page: int, total_pages: int
+    ) -> InlineKeyboardMarkup:
+        builder = InlineKeyboardBuilder()
+
+        if current_page > 0:
+            builder.button(
+                text="⬅️ Назад", callback_data=f"devices_page:{current_page - 1}"
+            )
+
+        if current_page < total_pages - 1:
+            builder.button(
+                text="Вперёд ➡️", callback_data=f"devices_page:{current_page + 1}"
+            )
+
+        builder.button(text="🔙 Назад в меню", callback_data="calc_income")
+        builder.adjust(2)
         return builder.as_markup()

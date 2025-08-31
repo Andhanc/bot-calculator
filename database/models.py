@@ -89,6 +89,7 @@ class AsicModel(Base):
     hash_rate = Column(Float, nullable=False)
     power_consumption = Column(Float, nullable=False)
     price_usd = Column(Float, default=0.0)
+    get_coin = Column(String(), default="")
     is_active = Column(Boolean, default=True)
 
     sell_requests = relationship("SellRequest", back_populates="device")

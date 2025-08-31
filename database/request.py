@@ -136,6 +136,7 @@ class CalculatorReq:
         hash_rate: float,
         power_consumption: float,
         price_usd: float,
+        get_coin: str = "",
     ) -> int:
         async with self.lock:
             async with self.db_session_maker() as session:
@@ -146,6 +147,7 @@ class CalculatorReq:
                     hash_rate=hash_rate,
                     power_consumption=power_consumption,
                     price_usd=price_usd,
+                    get_coin=get_coin,
                     is_active=True,
                 )
                 session.add(model)

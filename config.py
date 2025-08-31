@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-ADMIN_ID = 8072195912
+ADMIN_ID = 6177558353
 
 
 def get_db_url():
