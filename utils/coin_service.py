@@ -101,7 +101,7 @@ class CoinGeckoService:
                         logger.error(
                             f"Не удалось отправить уведомление пользователю {user.uid}: {e}"
                         )
-            await self.bot.send_message(-1002725954632, message, parse_mode="Markdown")
+            await self.bot.send_message(-1001546174824, message, parse_mode="Markdown")
             logger.info(f"Уведомления отправлены {len(users)} пользователям")
 
         except Exception as e:

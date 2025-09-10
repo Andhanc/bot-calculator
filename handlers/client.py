@@ -48,7 +48,7 @@ class Client:
         self.dp.message(Command("by"))(self.by_handler)
         self.dp.message(Command("faq"))(self.faq_handler)
 
-        self.dp.channel_post(ChannelFilter(-1002725954632))(
+        self.dp.channel_post(ChannelFilter(-1001546174824))(
             self.channel_message_handler
         )
 
