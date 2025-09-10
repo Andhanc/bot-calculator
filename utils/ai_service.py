@@ -3,7 +3,7 @@ from typing import Any, Dict
 
 import aiohttp
 
-API_KEY = "bCRbsa88-Z8rTkDbw-QdJdC90a-NDABdnxJ"
+API_KEY = "BYoJPkBN-tNrzeDNN-a2srEf4J-hl1JuY5P"
 BASE_URL = "https://api.ishushka.com"
 
 

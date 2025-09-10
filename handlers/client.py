@@ -621,7 +621,7 @@ class Client:
 
         context = await self.prepare_ai_context()
 
-        response = await ask_ishushka("nnUWipE0Hv", message.text, context)
+        response = await ask_ishushka("d0tSpMyO0f", message.text, context)
         await message.answer(
             response, parse_mode=None, reply_markup=await ClientKB.back_ai()
         )
