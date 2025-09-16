@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from database.models import Algorithm, Manufacturer
@@ -22,7 +22,6 @@ class CalculatorKB:
                 text=manufacturer.value,
                 callback_data=f"calc_manufacturer:{manufacturer.value}",
             )
-        builder.adjust(1)
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
@@ -57,26 +56,14 @@ class CalculatorKB:
         for line in paginated_lines:
             builder.button(text=line.name, callback_data=f"calc_line:{line.id}")
 
-        builder.adjust(1)
-
-        row_buttons = []
         if page > 0:
-            row_buttons.append(("⬅️ Назад", f"calc_lines_page:{page-1}"))
-
+            builder.button(text="⬅️ Назад", callback_data=f"calc_lines_page:{page-1}")
         if end_idx < len(model_lines):
-            row_buttons.append(("Вперед ➡️", f"calc_lines_page:{page+1}"))
-
-        for text, data in row_buttons:
-            builder.button(text=text, callback_data=data)
+            builder.button(text="Вперед ➡️", callback_data=f"calc_lines_page:{page+1}")
 
         builder.button(text="🔙 Назад", callback_data="back_calc_manufacturer")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
-
-        if row_buttons:
-            builder.adjust(1, len(row_buttons), 2)
-        else:
-            builder.adjust(1, 2)
-
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
@@ -92,26 +79,14 @@ class CalculatorKB:
         for model in paginated_models:
             builder.button(text=model.name, callback_data=f"calc_model:{model.id}")
 
-        builder.adjust(1)
-
-        row_buttons = []
         if page > 0:
-            row_buttons.append(("⬅️ Назад", f"calc_models_page:{page-1}"))
-
+            builder.button(text="⬅️ Назад", callback_data=f"calc_models_page:{page-1}")
         if end_idx < len(models):
-            row_buttons.append(("Вперед ➡️", f"calc_models_page:{page+1}"))
-
-        for text, data in row_buttons:
-            builder.button(text=text, callback_data=data)
+            builder.button(text="Вперед ➡️", callback_data=f"calc_models_page:{page+1}")
 
         builder.button(text="🔙 Назад", callback_data=f"back_calc_line")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
-
-        if row_buttons:
-            builder.adjust(1, len(row_buttons), 2)
-        else:
-            builder.adjust(1, 2)
-
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
@@ -121,7 +96,6 @@ class CalculatorKB:
             builder.button(
                 text=algorithm.value, callback_data=f"calc_algorithm:{algorithm.value}"
             )
-        builder.adjust(1)
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
@@ -131,6 +105,7 @@ class CalculatorKB:
     async def back_to_menu() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod

@@ -1,4 +1,4 @@
-from aiogram.types import InlineKeyboardMarkup
+from aiogram.types import InlineKeyboardButton, InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 
@@ -7,12 +7,14 @@ class ClientKB:
     async def back_ai() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад", callback_data="back_main")
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
     async def back_calc() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад", callback_data="calc_income")
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
@@ -22,10 +24,8 @@ class ClientKB:
         builder.button(text="🤖 AI-консультант", callback_data="ai_consult")
         builder.button(text="📋 Прайс-лист", callback_data="price_list")
         builder.button(text="🛠️ Ремонт ASIC+", callback_data="document")
-
         builder.button(text="📞 Связаться с менеджером", url="https://t.me/vadim_0350")
         builder.button(text="👤 Профиль", callback_data="profile")
-
         builder.adjust(1)
         return builder.as_markup()
 
@@ -76,7 +76,6 @@ class ClientKB:
         builder = InlineKeyboardBuilder()
         for line in model_lines:
             builder.button(text=line.name, callback_data=f"chars_line:{line.id}")
-            builder.adjust(1)
         builder.button(text="🔙 Назад", callback_data="calc_chars")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
@@ -87,7 +86,6 @@ class ClientKB:
         builder = InlineKeyboardBuilder()
         for model in models:
             builder.button(text=model.name, callback_data=f"chars_model:{model.id}")
-            builder.adjust(1)
         builder.button(text="🔙 Назад к линейкам", callback_data="back_chars_lines")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
