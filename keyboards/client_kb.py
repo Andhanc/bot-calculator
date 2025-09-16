@@ -67,7 +67,8 @@ class ClientKB:
         builder.button(text="Goldshell", callback_data="chars_manufacturer:Goldshell")
         builder.button(text="iPollo", callback_data="chars_manufacturer:iPollo")
         builder.button(text="🔙 Назад", callback_data="calc_income")
-        builder.adjust(2)
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
@@ -76,6 +77,7 @@ class ClientKB:
         for line in model_lines:
             builder.button(text=line.name, callback_data=f"chars_line:{line.id}")
         builder.button(text="🔙 Назад", callback_data="calc_chars")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()
 
@@ -85,6 +87,7 @@ class ClientKB:
         for model in models:
             builder.button(text=model.name, callback_data=f"chars_model:{model.id}")
         builder.button(text="🔙 Назад к линейкам", callback_data="back_chars_lines")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()
 
@@ -92,5 +95,6 @@ class ClientKB:
     async def chars_back() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад к моделям", callback_data="back_chars_models")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()

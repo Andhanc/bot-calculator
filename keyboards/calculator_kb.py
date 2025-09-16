@@ -23,7 +23,8 @@ class CalculatorKB:
                 callback_data=f"calc_manufacturer:{manufacturer.value}",
             )
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
-        builder.adjust(2)
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
@@ -68,6 +69,7 @@ class CalculatorKB:
             builder.button(text=text, callback_data=data)
 
         builder.button(text="🔙 Назад", callback_data="back_calc_manufacturer")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
 
         if row_buttons:
             builder.adjust(1, len(row_buttons), 2)
@@ -102,6 +104,7 @@ class CalculatorKB:
             builder.button(text=text, callback_data=data)
 
         builder.button(text="🔙 Назад", callback_data=f"back_calc_line")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
 
         if row_buttons:
             builder.adjust(1, len(row_buttons), 2)
@@ -118,7 +121,8 @@ class CalculatorKB:
                 text=algorithm.value, callback_data=f"calc_algorithm:{algorithm.value}"
             )
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
-        builder.adjust(2)
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
+        builder.adjust(1)
         return builder.as_markup()
 
     @staticmethod
@@ -131,6 +135,7 @@ class CalculatorKB:
     async def electricity_input() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад", callback_data="back_calc_model")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()
 
@@ -138,6 +143,7 @@ class CalculatorKB:
     async def hashrate_input() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад", callback_data="back_calc_algorithm")
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()
 
@@ -145,6 +151,6 @@ class CalculatorKB:
     async def power_input() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         builder.button(text="🔙 Назад", callback_data="back_calc_hashrate")
-
+        builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)
         return builder.as_markup()
