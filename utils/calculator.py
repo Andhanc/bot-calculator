@@ -66,10 +66,15 @@ class MiningCalculator:
         coin_symbols: List[str],
         usd_to_rub: float,
     ) -> str:
-        text = f"\n"
+        # Берем только BTC и DOGE (первые 2 монеты)
+        display_coins = coin_symbols[:2] if len(coin_symbols) >= 2 else coin_symbols
 
-        text += f"💰 **Результаты расчета**\n\n"
-        text += f"📊 **Доход в монетах:**\n"
+        text = ""
+
+        text += f"💰 **Криптовалюта:** {', '.join(display_coins)}\n"
+        text += f"🔄 **Курс доллара:** {usd_to_rub:.2f} RUB\n\n"
+
+        text += "📊 **Доход в монетах:**\n"
         for period_name, period_display in [
             ("day", "день"),
             ("week", "неделю"),
@@ -77,16 +82,16 @@ class MiningCalculator:
             ("year", "год"),
         ]:
             coin_strings = []
-            for symbol in coin_symbols:
-                coins = result["periods"][period_name]["coins_per_coin"][symbol]
-                coin_strings.append(
-                    f"{coins:.6f} {symbol}"
-                    if symbol == "BTC"
-                    else f"{coins:.4f} {symbol}"
-                )
+            for symbol in display_coins:
+                coins = result["periods"][period_name]["coins_per_coin"].get(symbol, 0)
+                if symbol == "BTC":
+                    coin_strings.append(f"{coins:.8f} {symbol}")
+                else:
+                    coin_strings.append(f"{coins:.4f} {symbol}")
+
             text += f"— За {period_display}: {' | '.join(coin_strings)}\n"
 
-        text += f"\n💵 **Доход в долларах:**\n"
+        text += "\n💵 **Доход в долларах:**\n"
         for period, name in [
             ("day", "день"),
             ("week", "неделю"),
@@ -96,7 +101,7 @@ class MiningCalculator:
             val = result["periods"][period]["income_usd"]
             text += f"— За {name}: ${val:.2f}\n"
 
-        text += f"\n⚡ **Затраты на электроэнергию:**\n"
+        text += "\n⚡ **Затраты на электроэнергию:**\n"
         for period, name in [
             ("day", "день"),
             ("week", "неделю"),
@@ -106,7 +111,7 @@ class MiningCalculator:
             val = result["periods"][period]["electricity_cost_usd"]
             text += f"— За {name}: ${val:.2f}\n"
 
-        text += f"\n📈 **Чистая доходность:**\n"
+        text += "\n📈 **Чистая доходность с учетом затрат на электроэнергию:**\n"
         for period, name in [
             ("day", "день"),
             ("week", "неделю"),
@@ -116,22 +121,17 @@ class MiningCalculator:
             val = result["periods"][period]["profit_usd"]
             text += f"— За {name}: ${val:.2f}\n"
 
-        text += f"\n🔄 Курс доллара: {usd_to_rub:.2f} руб.\n"
-        for symbol in coin_symbols:
-            price = result["coin_data"][symbol]["price"]
-            text += f"💰 Курс {symbol}: ${price:.4f}\n"
+        text += f"\n🕒 *Доходность актуальна на {datetime.now().strftime("%d.%m.%Y %H:%M")}*"
 
-        text += (
-            f"\n📅 Доходность актуальна на {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
         return text
 
     @staticmethod
     def format_result_rub(
         result: Dict[str, Any], coin_symbols: List[str], usd_to_rub: float
     ) -> str:
-        text = f"💰 **Результаты расчета в рублях**\n\n"
-        text += f"💵 **Доход в рублях:**\n"
+        text = "💰 **Результаты расчета в рублях**\n\n"
+
+        text += "💵 **Доход в рублях:**\n"
         for period, name in [
             ("day", "день"),
             ("week", "неделю"),
@@ -141,7 +141,7 @@ class MiningCalculator:
             val = result["periods"][period]["income_rub"]
             text += f"— За {name}: {val:.2f} руб.\n"
 
-        text += f"\n⚡ **Затраты на электроэнергию:**\n"
+        text += "\n⚡ **Затраты на электроэнергию:**\n"
         for period, name in [
             ("day", "день"),
             ("week", "неделю"),
@@ -151,7 +151,7 @@ class MiningCalculator:
             val = result["periods"][period]["electricity_cost_rub"]
             text += f"— За {name}: {val:.2f} руб.\n"
 
-        text += f"\n📈 **Чистая доходность:**\n"
+        text += "\n📈 **Чистая доходность:**\n"
         for period, name in [
             ("day", "день"),
             ("week", "неделю"),
@@ -161,7 +161,6 @@ class MiningCalculator:
             val = result["periods"][period]["profit_rub"]
             text += f"— За {name}: {val:.2f} руб.\n"
 
-        text += (
-            f"\n📅 Доходность актуальна на {datetime.now().strftime('%d.%m.%Y %H:%M')}"
-        )
+        text += f"\n🕒 *Актуально на {datetime.now().strftime("%d.%m.%Y %H:%M")}*"
+
         return text
