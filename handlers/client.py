@@ -1,3 +1,4 @@
+# [file name]: client.py
 from asyncio.log import logger
 from typing import Any, Dict
 
@@ -328,7 +329,6 @@ class Client:
                 pass
             return
 
-        # Получаем все модели для этой линейки
         models = await self.calculator_req.get_asic_models_by_model_line(model_line_id)
         if not models:
             await call.message.edit_text("❌ Нет моделей для этой линейки")
@@ -351,7 +351,6 @@ class Client:
     async def chars_model_handler(self, call: types.CallbackQuery, state: FSMContext):
         model_id = int(call.data.split(":")[1])
 
-        # Получаем конкретную модель
         model = await self.calculator_req.get_asic_model_by_id(model_id)
         if not model:
             await call.message.edit_text("❌ Модель не найдена")
@@ -361,7 +360,6 @@ class Client:
                 pass
             return
 
-        # Получаем информацию о модельной линейке
         model_line = await self.calculator_req.get_model_line_by_id(model.model_line_id)
         if not model_line:
             await call.message.edit_text("❌ Информация о модельной линейке не найдена")
@@ -403,7 +401,6 @@ class Client:
                 reply_markup=await ClientKB.chars_model_lines(model_lines),
             )
         except TelegramBadRequest as e:
-            # Игнорируем ошибку "message not modified"
             if "message is not modified" not in str(e):
                 raise
         finally:
@@ -422,26 +419,20 @@ class Client:
                 pass
             return
 
-        # Определяем порядок сортировки
         priority_order = ["BTC", "ETH", "LTC", "DOGE", "KAS"]
-
-        # Создаем словарь для быстрого доступа к индексу приоритета
+        
+        filtered_coins = [coin for coin in coins if coin.symbol in priority_order]
+        
         priority_dict = {symbol: index for index, symbol in enumerate(priority_order)}
-
-        # Сортируем монеты: сначала приоритетные в заданном порядке, затем остальные
-        def sort_key(coin):
-            if coin.symbol in priority_dict:
-                return priority_dict[coin.symbol]
-            else:
-                return len(priority_order)  # Помещаем остальные монеты в конец
-
-        sorted_coins = sorted(coins, key=sort_key)
+        sorted_coins = sorted(filtered_coins, key=lambda coin: priority_dict[coin.symbol])
 
         message = "💎 Текущие цены монет:\n\n"
         for coin in sorted_coins:
+            change_icon = "📈" if coin.price_change_24h >= 0 else "📉"
             message += (
                 f"🔸 {coin.symbol} ({coin.name})\n"
-                f"   💵 ${coin.current_price_usd:,.2f} | ₽{coin.current_price_rub:,.0f}\n\n"
+                f"   💵 ${coin.current_price_usd:,.2f} | ₽{coin.current_price_rub:,.0f}\n"
+                f"   {change_icon} {coin.price_change_24h:+.1f}%\n\n"
             )
 
         await call.message.edit_text(message, reply_markup=await ClientKB.back_calc())
@@ -794,14 +785,12 @@ class Client:
         coin_service = CoinGeckoService(self.settings)
         usd_to_rub = await coin_service.get_usd_rub_rate()
 
-        # --------------------  АСИК-метод  --------------------
         if data.get("method") == "asic":
             model = data["model"]
             model_line = await self.calculator_req.get_model_line_by_id(
                 model.model_line_id
             )
 
-            # собираем данные по всем монетам, которые может майнить модель
             coin_data = {}
             coin_symbols = []
 
@@ -841,18 +830,18 @@ class Client:
                 await message.answer("❌ Не удалось найти данные о монетах")
                 return
 
+            # Передаем правильный алгоритм в калькулятор
             result = MiningCalculator.calculate_profitability(
                 hash_rate=model.hash_rate,
                 power_consumption=model.power_consumption,
                 electricity_price_rub=electricity_price,
                 coin_data=coin_data,
                 usd_to_rub=usd_to_rub,
+                algorithm=model_line.algorithm.value.lower()  # Передаем алгоритм
             )
 
             text = (
                 f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
-                f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
-                f"🔌 **Потребление:** {model.power_consumption}W\n\n"
             )
             text += MiningCalculator.format_result(result, coin_symbols, usd_to_rub)
 
@@ -877,18 +866,17 @@ class Client:
                     }
                 },
                 usd_to_rub=usd_to_rub,
+                algorithm=algorithm.value.lower()  # Передаем алгоритм
             )
 
             text = (
                 f"⚙️ **Алгоритм:** {algorithm.value}\n"
-                f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
-                f"🔌 **Мощность:** {power}W\n\n"
             )
-            text += MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
+            text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
 
         await message.answer(text, reply_markup=await CalculatorKB.result_menu())
         await state.set_state(CalculatorState.show_result)
-
+        
     async def calc_power_handler(self, message: types.Message, state: FSMContext):
         try:
             power = float(message.text.replace(",", "."))
@@ -940,12 +928,8 @@ class Client:
                 usd_to_rub=usd_to_rub,
             )
 
-            text = (
-                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
-                f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
-                f"🔌 **Потребление:** {model.power_consumption}W\n\n"
-            )
-            text += MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
+            
+            text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
 
         else:
             algorithm = data["algorithm"]
@@ -975,7 +959,7 @@ class Client:
                 f"⚡ **Хэшрейт:** {hashrate} TH/s\n"
                 f"🔌 **Мощность:** {power}W\n\n"
             )
-            text += MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
+            text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
 
         await call.message.edit_text(
             text, reply_markup=await CalculatorKB.result_menu()
@@ -1037,11 +1021,7 @@ class Client:
                 usd_to_rub=usd_to_rub,
             )
 
-            text = (
-                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
-                f"⚡ **Хэшрейт:** {model.hash_rate} TH/s\n"
-                f"🔌 **Потребление:** {model.power_consumption}W\n\n"
-            )
+            
             text += MiningCalculator.format_result_rub(
                 result, [coin.symbol], usd_to_rub
             )
@@ -1142,7 +1122,6 @@ class Client:
             pass
 
     async def calc_hashrate_handler(self, message: types.Message, state: FSMContext):
-        """Пользователь ввёл хешрейт (TH/s)."""
         try:
             hashrate = float(message.text.replace(",", "."))
             if hashrate <= 0:

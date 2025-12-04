@@ -1,0 +1,18 @@
+[Unit]
+Description=MainerCrypto Telegram Bot
+After=network.target postgresql.service
+
+[Service]
+Type=simple
+User=your_username
+WorkingDirectory=/opt/mainercrypto
+Environment="PATH=/opt/mainercrypto/venv/bin"
+ExecStart=/opt/mainercrypto/venv/bin/python /opt/mainercrypto/main.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
+
