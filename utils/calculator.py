@@ -33,7 +33,7 @@ class MiningCalculator:
         elif algorithm_lower in ["kheavyhash"]:
             params.update({"hashrate_unit": "th/s", "block_time": 1})  # На capminer.ru для kHeavyHash используется TH/s
         elif algorithm_lower in ["blake2s"]:
-            params.update({"hashrate_unit": "gh/s", "block_time": 30})
+            params.update({"hashrate_unit": "th/s", "block_time": 30})  # На capminer.ru для Blake2S используется TH/s
         elif algorithm_lower in ["blake2b+sha3", "blake2b_sha3"]:
             params.update({"hashrate_unit": "gh/s", "block_time": 60})
 
@@ -105,12 +105,70 @@ class MiningCalculator:
         miner_hash = hash_rate
         network_hash = info["network_hashrate"]
         
-        # Конвертация единиц для Etchash
-        # Если алгоритм Etchash и hash_rate в GH/s, а network_hashrate в MH/s
+        # Конвертация единиц для правильного расчета доли майнера
+        # ВАЖНО: hash_rate может приходить в разных единицах в зависимости от источника:
+        # - Для ручного ввода: в единицах, указанных в algo_params["hashrate_unit"]
+        # - Для ASIC-майнеров: может быть в других единицах
+        # network_hashrate в БД хранится в определенных единицах для каждого алгоритма:
+        # - SHA-256: TH/s
+        # - Scrypt: GH/s
+        # - Etchash: MH/s
+        # - kHeavyHash: TH/s
+        # - Blake2S: TH/s
+        # Нужно привести miner_hash и network_hash к одинаковым единицам!
+        
         algorithm_lower_check = algorithm.lower()
-        if algorithm_lower_check in ["etchash", "ethash", "etchash/ethash"]:
-            # Конвертируем miner_hashrate из GH/s в MH/s
-            miner_hash = hash_rate * 1000  # GH/s -> MH/s
+        
+        if algorithm_lower_check in ["scrypt"]:
+            # Для Scrypt:
+            # - network_hashrate в БД: GH/s (например, 3,464,270 GH/s)
+            # - hash_rate может быть в MH/s (L7: 8800 MH/s) или в GH/s (L9: 15 GH/s)
+            # - Если hash_rate > 1000, вероятно это MH/s, конвертируем в GH/s
+            # - Если hash_rate <= 1000, вероятно это уже GH/s
+            if hash_rate > 1000:  # Если значение большое, вероятно это MH/s
+                miner_hash = hash_rate / 1000  # MH/s -> GH/s
+            else:
+                miner_hash = hash_rate  # Уже в GH/s
+            # network_hash уже в GH/s, не конвертируем
+        
+        elif algorithm_lower_check in ["etchash", "ethash", "etchash/ethash"]:
+            # Для Etchash:
+            # - network_hashrate в БД: MH/s (например, 387,376,804 MH/s)
+            # - hash_rate может быть в MH/s (E9: 2400 MH/s, iPollo: 850-3700 MH/s) или в GH/s (ручной ввод: GH/s)
+            # - Для ASIC-майнеров: значения обычно в MH/s (2400, 3280, 850, 950, 3000-3700)
+            # - Для ручного ввода: значения в GH/s (как на capminer.ru)
+            # - Если hash_rate < 10, вероятно это GH/s, конвертируем в MH/s
+            # - Если hash_rate >= 10, вероятно это уже в MH/s (для ASIC) или GH/s (для ручного ввода)
+            # - Более точная проверка: если hash_rate < 10, это GH/s; если >= 10 и < 1000, это может быть GH/s (ручной ввод) или MH/s (ASIC)
+            # - Для ASIC-майнеров значения обычно >= 100 (2400, 3280, 850, 950, 3000-3700), это MH/s
+            # - Для ручного ввода значения обычно < 100 (например, 1-10 GH/s), это GH/s
+            if hash_rate < 10:  # Если значение очень маленькое (< 10), вероятно это GH/s
+                miner_hash = hash_rate * 1000  # GH/s -> MH/s
+            elif hash_rate >= 10 and hash_rate < 100:  # Если значение между 10 и 100, это может быть GH/s (ручной ввод)
+                # Для ручного ввода в GH/s (например, 1-10 GH/s)
+                miner_hash = hash_rate * 1000  # GH/s -> MH/s
+            else:
+                # Если значение >= 100, это скорее всего MH/s (ASIC-майнеры: 850, 950, 2400, 3280, 3000-3700)
+                miner_hash = hash_rate  # Уже в MH/s
+            # network_hash уже в MH/s, не конвертируем
+        
+        elif algorithm_lower_check in ["kheavyhash"]:
+            # Для kHeavyHash:
+            # - network_hashrate в БД: TH/s (например, 1,600,793 TH/s)
+            # - hash_rate должен быть в TH/s (KAS: 20 TH/s, Ice River: 400 TH/s, 200 TH/s, 2 TH/s, 6 TH/s, 12 TH/s)
+            # - Если hash_rate < 1, вероятно это GH/s, конвертируем в TH/s
+            if hash_rate < 1:  # Если значение очень маленькое, вероятно это GH/s
+                miner_hash = hash_rate / 1000  # GH/s -> TH/s
+            else:
+                miner_hash = hash_rate  # Уже в TH/s
+            # network_hash уже в TH/s, не конвертируем
+        
+        else:
+            # Для SHA-256, Blake2S и других:
+            # - network_hashrate в БД: TH/s
+            # - hash_rate должен быть в TH/s
+            miner_hash = hash_rate  # Уже в TH/s
+            # network_hash уже в TH/s, не конвертируем
         
         # ШАГ 1: Рассчитываем долю майнера (единицы должны совпадать!)
         share = miner_hash / network_hash if network_hash > 0 else 0

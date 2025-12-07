@@ -210,9 +210,9 @@ class CreateDatabase:
                             ),
                             AlgorithmData(
                                 algorithm=Algorithm.BLAKE2S,
-                                default_coin="NEOX",
+                                default_coin="KDA",  # KDA использует Blake2S
                                 difficulty=200_000_000,
-                                network_hashrate=3_000,
+                                network_hashrate=86_853_786,  # TH/s - актуальное значение для KDA
                                 block_reward=3.5,
                             ),
                             AlgorithmData(

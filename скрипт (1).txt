@@ -1,0 +1,423 @@
+-- BITMAIN
+-- Модели S19
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('S19', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'S19' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Bitmain Antminer S19 82 TH/s', 82, 3250),
+    ('Bitmain Antminer S19 86 TH/s', 86, 3250),
+    ('Bitmain Antminer S19 86 TH/s 126 Chip', 86, 3250),
+    ('Bitmain Antminer S19 90 TH/s', 90, 3250),
+    ('Bitmain Antminer S19 90 TH/s 126 Chip', 90, 3250),
+    ('Bitmain Antminer S19 95 TH/s', 95, 3250),
+    ('Bitmain Antminer S19 Pro 86 TH/s', 86, 3250),
+    ('Bitmain Antminer S19 PRO 104 TH/s', 104, 3250),
+    ('Bitmain Antminer S19 PRO 110TH/s', 110, 3250),
+    ('Bitmain Antminer S19 PRO+ Hydro 184 TH/s', 184, 5060),
+    ('Bitmain Antminer S19 PRO+ Hydro 198 TH/s', 198, 5440),
+    ('Bitmain Antminer S19K PRO 110 TH/s', 110, 3000),
+    ('Bitmain Antminer S19K PRO 115 TH/s', 115, 3000),
+    ('Bitmain Antminer S19K PRO 120 TH/s', 120, 3000),
+    ('Bitmain Antminer S19K PRO 136 TH/s', 136, 3050),
+    ('Bitmain Antminer S19 JXP 143 TH/s', 143, 3050),
+    ('Bitmain Antminer S19 XP 141 TH/s', 141, 3050),
+    ('Bitmain Antminer S19 XP 134 TH/s', 134, 3050),
+    ('Bitmain Antminer S19 JXP 151 TH/s', 151, 3050),
+    ('Bitmain Antminer S19 XP Hydro 257 TH/s', 257, 5300),
+    ('Bitmain Antminer S19J PRO 100 TH/s', 100, 3250),
+    ('Bitmain Antminer S19J PRO 104 TH/s', 104, 3250),
+    ('Bitmain Antminer S19J PRO+ 117 TH/S', 117, 3350),
+    ('Bitmain Antminer S19J PRO+ 120 TH/S', 120, 3355),
+    ('Bitmain Antminer S19J PRO+ 122 TH/S', 122, 3355)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'S19' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели S21
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('S21', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'S21' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Bitmain Antminer S21 200TH/s', 200, 3500),
+    ('Bitmain Antminer S21 188 TH/s', 188, 3500),
+    ('Bitmain Antminer S21 195 TH/s', 195, 3500),
+    ('Bitmain Antminer S21+ 216 TH/s', 216, 3500),
+    ('Bitmain Antminer S21 Pro 220 TH/s', 220, 3500),
+    ('Bitmain Antminer S21 Pro 234 TH/s', 234, 3500),
+    ('Bitmain Antminer S21 XP 270 TH/s', 270, 3650),
+    ('Bitmain Antminer S21 Hydro 319 Th/s', 319, 5360),
+    ('Bitmain Antminer S21 Hydro 335 Th/s', 335, 5360),
+    ('Bitmain Antminer S21 XP Hydro 473 Th/s', 473, 5680),
+    ('Bitmain Antminer S21 XP IMM 300 Th/s', 300, 4050),
+    ('Bitmain Antminer S21 IMM 239 Th/s', 239, 4050),
+    ('Bitmain Antminer U3S21EXPH 860 Th/s', 860, 11200)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'S21' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели T21
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('T21', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'T21' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Bitmain Antminer T21 180 TH/s', 180, 3610),
+    ('Bitmain Antminer T21 186 TH/s', 186, 3610),
+    ('Bitmain Antminer T21 190 TH/s', 190, 3610)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'T21' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели L7 (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('L7', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'L7' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'LTC, DOGE',
+    true
+FROM (VALUES
+    ('Bitmain Antminer L7 8800 MH/s', 8800, 3172),
+    ('Bitmain Antminer L7 8550 MH/s', 8550, 3300),
+    ('Bitmain Antminer L7 9050MH/s', 9050, 3260),
+    ('Bitmain Antminer L7 9300 MH/s', 9300, 3350),
+    ('Bitmain Antminer L7 9500 MH/s', 9500, 3420)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'L7' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели L9 (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('L9', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'L9' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'LTC, DOGE',
+    true
+FROM (VALUES
+    ('Bitmain Antminer L9 15 GH/s', 15000, 3260),
+    ('Bitmain Antminer L9 16 GH/s', 16000, 3260),
+    ('Bitmain Antminer L9 17 GH/s', 17000, 3260),
+    ('Bitmain Antminer L9 17,6 GH/s', 17600, 3260)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'L9' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели E9; E9 Pro (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('E9', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'E9' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'ETC, ETHW',
+    true
+FROM (VALUES
+    ('Bitmain Antminer E9 2400 MH/s', 2400, 2500),
+    ('Bitmain Antminer E9 Pro 3280 MH/s', 3280, 2200),
+    ('Bitmain Antminer E9 Pro 3380 MH/s', 3380, 2200),
+    ('Bitmain Antminer E9 Pro 3480 MH/s', 3480, 2200),
+    ('Bitmain Antminer E9 Pro 3580 MH/s', 3580, 2200),
+    ('Bitmain Antminer E9 Pro 3680 MH/s', 3680, 2200),
+    ('Bitmain Antminer E9 Pro 3780 MH/s', 3780, 2200)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'E9' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели KA3 (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('KA3', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'KA3' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'KDA',
+    true
+FROM (VALUES
+    ('Bitmain Antminer KA3 173 TH/s', 173, 3154)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'KA3' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- Модели KAS (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('KAS', 'BITMAIN', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'KAS' AND manufacturer = 'BITMAIN'),
+    hash_rate,
+    power_consumption,
+    'KASPA',
+    true
+FROM (VALUES
+    ('Bitmain Antminer KAS Miner KS5', 20, 3150),
+    ('Bitmain Antminer KAS Miner KS5 Pro', 21, 3150)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'KAS' 
+    AND aml.manufacturer = 'BITMAIN'
+);
+
+-- WHATSMINER
+-- Модели М50
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('M50', 'WHATSMINER', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'M50' AND manufacturer = 'WHATSMINER'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Whatsminer M50S 126 TH/s', 126, 3480),
+    ('Whatsminer M50S 128 TH/s', 128, 3380),
+    ('Whatsminer M50S 130 TH/s', 130, 3380),
+    ('Whatsminer M50S 250 TH/s', 250, 6750),
+    ('Whatsminer M50 114 Th/s', 114, 3360),
+    ('Whatsminer M50 116 TH/s', 116, 3360),
+    ('Whatsminer M50 118 TH/s', 118, 3360),
+    ('Whatsminer M50 120 TH/s', 120, 3480),
+    ('Whatsminer M50 122 TH/s', 122, 3480),
+    ('Whatsminer M50S++ 150 TH/s', 150, 3432),
+    ('Whatsminer M50S++ 140 TH/s', 140, 3360),
+    ('Whatsminer M50S++ 138 TH/s', 138, 3312),
+    ('Whatsminer M50S++ 136 TH/s', 136, 3264),
+    ('Whatsminer M53 230 TH/s', 230, 6820),
+    ('Whatsminer M56S 200 TH/s', 200, 6572),
+    ('Whatsminer M53S++ 320 TH/s', 320, 7040)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'M50' 
+    AND aml.manufacturer = 'WHATSMINER'
+);
+
+-- Модели М30
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('M30', 'WHATSMINER', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'M30' AND manufacturer = 'WHATSMINER'),
+    hash_rate,
+    power_consumption,
+    'BTC, BCH, BSV, LCC, TRC, XJO, ACOIN, PPC, UNB, CRW, CURE',
+    true
+FROM (VALUES
+    ('Whatsminer M30S 100 TH/s', 100, 3400),
+    ('Whatsminer M30S 102 TH/s', 102, 3400),
+    ('Whatsminer M30S 104 TH/s', 104, 3400),
+    ('Whatsminer M30S 106 TH/s', 106, 3400),
+    ('Whatsminer M30S 108 TH/s', 108, 3400),
+    ('Whatsminer M30S 110 TH/s', 110, 3400),
+    ('Whatsminer M33S 216 TH/s', 216, 3900),
+    ('Whatsminer M36S 172 TH/s', 172, 3420),
+    ('Whatsminer M36S 238 TH/s', 238, 3420),
+    ('Whatsminer M60 166 TH/s', 166, 3250),
+    ('Whatsminer M60 176 TH/s', 176, 3250)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'M30' 
+    AND aml.manufacturer = 'WHATSMINER'
+);
+
+-- Ice River
+-- Модели Ice River (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('Ice River', 'ICERIVER', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'Ice River' AND manufacturer = 'ICERIVER'),
+    hash_rate,
+    power_consumption,
+    'KASPA',
+    true
+FROM (VALUES
+    ('IceRiver KS0 ultra', 400, 100),
+    ('ICERIVER KAS KS0 PRO', 200, 100),
+    ('Iceriver KS2 Lite', 2, 500),
+    ('ICERIVER KS3M', 6, 3200),
+    ('ICERIVER KS5L', 12, 3400)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'Ice River' 
+    AND aml.manufacturer = 'ICERIVER'
+);
+
+-- Goldshell
+-- Модели Goldshell (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('Goldshell', 'GOLDSHELL', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'Goldshell' AND manufacturer = 'GOLDSHELL'),
+    hash_rate,
+    power_consumption,
+    'Various',
+    true
+FROM (VALUES
+    ('Goldshell E-DG1M', 3400, 1800),
+    ('Goldshell E-KA1M', 5.5, 1800),
+    ('Goldshell KA BOX 1.18TH', 1.18, 400),
+    ('Goldshell AL BOX 360G', 360, 240)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'Goldshell' 
+    AND aml.manufacturer = 'GOLDSHELL'
+);
+
+-- iPollo
+-- Модели iPollo (используем SHA256 как временное решение)
+INSERT INTO asic_model_lines (name, manufacturer, algorithm)
+VALUES 
+('iPollo', 'IPOLLO', 'SHA256')
+ON CONFLICT DO NOTHING;
+
+INSERT INTO asic_models (name, model_line_id, hash_rate, power_consumption, get_coin, is_active)
+SELECT 
+    model_name,
+    (SELECT id FROM asic_model_lines WHERE name = 'iPollo' AND manufacturer = 'IPOLLO'),
+    hash_rate,
+    power_consumption,
+    'ETC, ETH',
+    true
+FROM (VALUES
+    ('iPollo V1H 850mh', 850, 690),
+    ('iPollo V1H 950mh', 950, 690),
+    ('iPollo V2H 3000 MH/s', 3000, 475),
+    ('iPollo V2H 3100 MH/s', 3100, 475),
+    ('iPollo V2H 3200 MH/s', 3200, 475),
+    ('iPollo V2H 3300 MH/s', 3300, 475),
+    ('iPollo V2H 3400 MH/s', 3400, 475),
+    ('iPollo V2H 3500 MH/s', 3500, 475),
+    ('iPollo V2H 3600 MH/s', 3600, 475),
+    ('iPollo V2H 3700 MH/s', 3700, 475),
+    ('iPollo V2X 1200 MH/s', 1200, 475)
+) AS models(model_name, hash_rate, power_consumption)
+WHERE NOT EXISTS (
+    SELECT 1 FROM asic_models am 
+    JOIN asic_model_lines aml ON am.model_line_id = aml.id 
+    WHERE am.name = models.model_name 
+    AND aml.name = 'iPollo' 
+    AND aml.manufacturer = 'IPOLLO'
+);

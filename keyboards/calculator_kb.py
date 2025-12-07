@@ -95,9 +95,11 @@ class CalculatorKB:
     async def choose_algorithm() -> InlineKeyboardMarkup:
         builder = InlineKeyboardBuilder()
         for algorithm in Algorithm:
-            builder.button(
-                text=algorithm.value, callback_data=f"calc_algorithm:{algorithm.value}"
-            )
+            # Исключаем Blake2B+SHA3 из списка
+            if algorithm != Algorithm.BLAKE2B_SHA3:
+                builder.button(
+                    text=algorithm.value, callback_data=f"calc_algorithm:{algorithm.value}"
+                )
         builder.button(text="🔙 Назад", callback_data="back_calc_method")
         builder.button(text="🔙 Главное меню", callback_data="back_main")
         builder.adjust(1)

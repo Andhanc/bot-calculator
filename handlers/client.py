@@ -769,7 +769,9 @@ class Client:
             hashrate_unit = "GH/s"  # Для Etchash вводим в GH/s
         elif algorithm_lower in ["kheavyhash"]:
             hashrate_unit = "TH/s"  # Для kHeavyHash вводим в TH/s
-        elif algorithm_lower in ["blake2s", "blake2b+sha3", "blake2b_sha3"]:
+        elif algorithm_lower in ["blake2s"]:
+            hashrate_unit = "TH/s"  # Для Blake2S вводим в TH/s
+        elif algorithm_lower in ["blake2b+sha3", "blake2b_sha3"]:
             hashrate_unit = "GH/s"
         else:
             hashrate_unit = "TH/s"  # По умолчанию
@@ -953,6 +955,7 @@ class Client:
                     }
                 },
                 usd_to_rub=usd_to_rub,
+                algorithm=model_line.algorithm.value.lower(),  # Передаем алгоритм для правильной конвертации единиц
             )
 
             
@@ -980,8 +983,10 @@ class Client:
                     hashrate = hashrate * 1000  # TH/s -> GH/s
                 hashrate_unit_display = "GH/s"
                 hashrate_display = hashrate
-            elif algorithm_lower in ["scrypt", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+            elif algorithm_lower in ["scrypt", "blake2b+sha3", "blake2b_sha3"]:
                 hashrate_unit_display = "GH/s"
+            elif algorithm_lower in ["blake2s"]:
+                hashrate_unit_display = "TH/s"  # Для Blake2S в TH/s
             elif algorithm_lower in ["kheavyhash"]:
                 hashrate_unit_display = "TH/s"  # Для kHeavyHash в TH/s
             # Для SHA-256 остается TH/s
@@ -1066,6 +1071,7 @@ class Client:
                     }
                 },
                 usd_to_rub=usd_to_rub,
+                algorithm=model_line.algorithm.value.lower(),  # Передаем алгоритм для правильной конвертации единиц
             )
 
             
@@ -1095,8 +1101,10 @@ class Client:
                     hashrate = hashrate * 1000  # TH/s -> GH/s
                 hashrate_unit_display = "GH/s"
                 hashrate_display = hashrate
-            elif algorithm_lower in ["scrypt", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+            elif algorithm_lower in ["scrypt", "blake2b+sha3", "blake2b_sha3"]:
                 hashrate_unit_display = "GH/s"
+            elif algorithm_lower in ["blake2s"]:
+                hashrate_unit_display = "TH/s"  # Для Blake2S в TH/s
             elif algorithm_lower in ["kheavyhash"]:
                 hashrate_unit_display = "TH/s"  # Для kHeavyHash в TH/s
             # Для SHA-256 остается TH/s
@@ -1204,8 +1212,10 @@ class Client:
                 # В базе данных ETCHASH определен как "Etchash/Ethash"
                 if algorithm_lower in ["sha-256", "sha256"]:
                     hashrate_unit = "TH/s"
-                elif algorithm_lower in ["scrypt", "etchash", "ethash", "etchash/ethash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+                elif algorithm_lower in ["scrypt", "etchash", "ethash", "etchash/ethash", "blake2b+sha3", "blake2b_sha3"]:
                     hashrate_unit = "GH/s"
+                elif algorithm_lower in ["blake2s"]:
+                    hashrate_unit = "TH/s"  # Для Blake2S в TH/s
                 elif algorithm_lower in ["kheavyhash"]:
                     hashrate_unit = "TH/s"  # Для kHeavyHash в TH/s
             
@@ -1240,7 +1250,9 @@ class Client:
                 hashrate_unit = "GH/s"  # Для Etchash вводим в GH/s
             elif algorithm_lower in ["kheavyhash"]:
                 hashrate_unit = "TH/s"  # Для kHeavyHash в TH/s
-            elif algorithm_lower in ["blake2s", "blake2b+sha3", "blake2b_sha3"]:
+            elif algorithm_lower in ["blake2s"]:
+                hashrate_unit = "TH/s"  # Для Blake2S в TH/s
+            elif algorithm_lower in ["blake2b+sha3", "blake2b_sha3"]:
                 hashrate_unit = "GH/s"
             else:
                 hashrate_unit = "TH/s"  # По умолчанию
