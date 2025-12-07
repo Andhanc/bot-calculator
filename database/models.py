@@ -191,7 +191,7 @@ class CreateDatabase:
                                 algorithm=Algorithm.KHEAVYHASH,
                                 default_coin="KAS",
                                 difficulty=150_000_000_000,
-                                network_hashrate=300_000,
+                                network_hashrate=1_600_793,  # TH/s - актуальное значение для KAS
                                 block_reward=100,
                             ),
                             AlgorithmData(

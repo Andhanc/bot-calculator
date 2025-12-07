@@ -31,7 +31,7 @@ class MiningCalculator:
         elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
             params.update({"hashrate_unit": "gh/s", "block_time": 13})  # На capminer.ru для Etchash используется GH/s
         elif algorithm_lower in ["kheavyhash"]:
-            params.update({"hashrate_unit": "gh/s", "block_time": 1})
+            params.update({"hashrate_unit": "th/s", "block_time": 1})  # На capminer.ru для kHeavyHash используется TH/s
         elif algorithm_lower in ["blake2s"]:
             params.update({"hashrate_unit": "gh/s", "block_time": 30})
         elif algorithm_lower in ["blake2b+sha3", "blake2b_sha3"]:
@@ -67,7 +67,7 @@ class MiningCalculator:
         #   Для SHA-256: оба в TH/s
         #   Для Scrypt: оба в GH/s
         #   Для Etchash: оба в MH/s
-        #   Для kHeavyHash: оба в GH/s
+        #   Для kHeavyHash: оба в TH/s
         #
         # ШАГ 2: Расчет количества блоков в день
         #   blocks_per_day = 86400 / block_time
@@ -100,7 +100,7 @@ class MiningCalculator:
         # Для SHA-256: оба в TH/s
         # Для Scrypt: оба в GH/s (network_hashrate в БД в GH/s)
         # Для Etchash: hash_rate приходит в GH/s (как на capminer.ru), network_hashrate в БД в MH/s
-        # Для kHeavyHash: оба в GH/s
+        # Для kHeavyHash: оба в TH/s
         
         miner_hash = hash_rate
         network_hash = info["network_hashrate"]

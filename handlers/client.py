@@ -768,7 +768,7 @@ class Client:
         elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
             hashrate_unit = "GH/s"  # Для Etchash вводим в GH/s
         elif algorithm_lower in ["kheavyhash"]:
-            hashrate_unit = "GH/s"
+            hashrate_unit = "TH/s"  # Для kHeavyHash вводим в TH/s
         elif algorithm_lower in ["blake2s", "blake2b+sha3", "blake2b_sha3"]:
             hashrate_unit = "GH/s"
         else:
@@ -980,8 +980,10 @@ class Client:
                     hashrate = hashrate * 1000  # TH/s -> GH/s
                 hashrate_unit_display = "GH/s"
                 hashrate_display = hashrate
-            elif algorithm_lower in ["scrypt", "kheavyhash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+            elif algorithm_lower in ["scrypt", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
                 hashrate_unit_display = "GH/s"
+            elif algorithm_lower in ["kheavyhash"]:
+                hashrate_unit_display = "TH/s"  # Для kHeavyHash в TH/s
             # Для SHA-256 остается TH/s
 
             result = MiningCalculator.calculate_profitability(
@@ -1093,8 +1095,10 @@ class Client:
                     hashrate = hashrate * 1000  # TH/s -> GH/s
                 hashrate_unit_display = "GH/s"
                 hashrate_display = hashrate
-            elif algorithm_lower in ["scrypt", "kheavyhash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+            elif algorithm_lower in ["scrypt", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
                 hashrate_unit_display = "GH/s"
+            elif algorithm_lower in ["kheavyhash"]:
+                hashrate_unit_display = "TH/s"  # Для kHeavyHash в TH/s
             # Для SHA-256 остается TH/s
 
             result = MiningCalculator.calculate_profitability(
@@ -1200,8 +1204,10 @@ class Client:
                 # В базе данных ETCHASH определен как "Etchash/Ethash"
                 if algorithm_lower in ["sha-256", "sha256"]:
                     hashrate_unit = "TH/s"
-                elif algorithm_lower in ["scrypt", "etchash", "ethash", "etchash/ethash", "kheavyhash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
+                elif algorithm_lower in ["scrypt", "etchash", "ethash", "etchash/ethash", "blake2s", "blake2b+sha3", "blake2b_sha3"]:
                     hashrate_unit = "GH/s"
+                elif algorithm_lower in ["kheavyhash"]:
+                    hashrate_unit = "TH/s"  # Для kHeavyHash в TH/s
             
             await message.answer(
                 f"❌ Введите положительное число ({hashrate_unit}):",
@@ -1233,7 +1239,7 @@ class Client:
             elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
                 hashrate_unit = "GH/s"  # Для Etchash вводим в GH/s
             elif algorithm_lower in ["kheavyhash"]:
-                hashrate_unit = "GH/s"
+                hashrate_unit = "TH/s"  # Для kHeavyHash в TH/s
             elif algorithm_lower in ["blake2s", "blake2b+sha3", "blake2b_sha3"]:
                 hashrate_unit = "GH/s"
             else:
