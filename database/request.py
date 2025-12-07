@@ -102,10 +102,15 @@ class CalculatorReq:
     ) -> List[AsicModelLine]:
         async with self.lock:
             async with self.db_session_maker() as session:
+                # Получаем только линейки, в которых есть хотя бы одна активная модель
                 res = await session.execute(
-                    select(AsicModelLine).where(
-                        AsicModelLine.manufacturer == manufacturer
+                    select(AsicModelLine)
+                    .join(AsicModel, AsicModelLine.id == AsicModel.model_line_id)
+                    .where(
+                        AsicModelLine.manufacturer == manufacturer,
+                        AsicModel.is_active == True
                     )
+                    .distinct()
                 )
                 lines = list(res.scalars().all())
 
