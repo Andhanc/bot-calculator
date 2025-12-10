@@ -134,22 +134,16 @@ class MiningCalculator:
         elif algorithm_lower_check in ["etchash", "ethash", "etchash/ethash"]:
             # Для Etchash:
             # - network_hashrate в БД: MH/s (например, 387,376,804 MH/s)
-            # - hash_rate может быть в MH/s (E9: 2400 MH/s, iPollo: 850-3700 MH/s) или в GH/s (ручной ввод: GH/s)
-            # - Для ASIC-майнеров: значения обычно в MH/s (2400, 3280, 850, 950, 3000-3700)
-            # - Для ручного ввода: значения в GH/s (как на capminer.ru)
-            # - Если hash_rate < 10, вероятно это GH/s, конвертируем в MH/s
-            # - Если hash_rate >= 10, вероятно это уже в MH/s (для ASIC) или GH/s (для ручного ввода)
-            # - Более точная проверка: если hash_rate < 10, это GH/s; если >= 10 и < 1000, это может быть GH/s (ручной ввод) или MH/s (ASIC)
-            # - Для ASIC-майнеров значения обычно >= 100 (2400, 3280, 850, 950, 3000-3700), это MH/s
-            # - Для ручного ввода значения обычно < 100 (например, 1-10 GH/s), это GH/s
-            if hash_rate < 10:  # Если значение очень маленькое (< 10), вероятно это GH/s
-                miner_hash = hash_rate * 1000  # GH/s -> MH/s
-            elif hash_rate >= 10 and hash_rate < 100:  # Если значение между 10 и 100, это может быть GH/s (ручной ввод)
-                # Для ручного ввода в GH/s (например, 1-10 GH/s)
-                miner_hash = hash_rate * 1000  # GH/s -> MH/s
-            else:
-                # Если значение >= 100, это скорее всего MH/s (ASIC-майнеры: 850, 950, 2400, 3280, 3000-3700)
+            # - hash_rate может быть в MH/s (ASIC: 2400, 3280, 850, 950, 3000-3700 MH/s) или в GH/s (ручной ввод: GH/s)
+            # - Для ASIC-майнеров: значения всегда >= 850 MH/s (850, 950, 2400, 3280, 3000-3700)
+            # - Для ручного ввода: значения в GH/s (как на capminer.ru), обычно 1-1000 GH/s
+            # - hashrate_unit для Etchash = "gh/s", значит для ручного ввода hash_rate в GH/s
+            # - Логика: если hash_rate >= 850, это скорее всего MH/s (ASIC), иначе GH/s (ручной ввод)
+            if hash_rate >= 850:  # ASIC-майнеры: значения всегда >= 850 MH/s
                 miner_hash = hash_rate  # Уже в MH/s
+            else:
+                # Ручной ввод: значения в GH/s (согласно hashrate_unit)
+                miner_hash = hash_rate * 1000  # GH/s -> MH/s
             # network_hash уже в MH/s, не конвертируем
         
         elif algorithm_lower_check in ["kheavyhash"]:
