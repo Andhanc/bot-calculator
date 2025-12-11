@@ -14,7 +14,8 @@ __pycache__/
 *.db
 *.sqlite
 *.sqlite3
-mainercrypto.db
+# Исключение: mainercrypto.db добавлена в репозиторий
+!mainercrypto.db
 
 # IDE
 .vscode/
