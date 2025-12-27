@@ -31,20 +31,41 @@ class BotRunner:
 
     def setup_scheduler(self):
         # Обновление цен и отправка курсов каждые 10 минут
+        # Первое обновление произойдет сразу при старте (misfire_grace_time=None)
         trigger = IntervalTrigger(minutes=10)
         self.scheduler.add_job(
             self.coin_service.update_coin_prices_and_notify,
             trigger,
             id="price_update_interval",
+            max_instances=1,  # Только один экземпляр задачи может выполняться одновременно
         )
 
     async def run(self):
         await self.setup()
         self.scheduler.start()
         print("Планировщик запущен. Цены и курсы будут обновляться каждые 10 минут")
+        
+        # Обновляем цены сразу при старте
+        print("Первоначальное обновление цен...")
         try:
-            await self.bot_instance.dp.start_polling(self.bot_instance.bot)
+            await self.coin_service.update_coin_prices_and_notify()
+        except Exception as e:
+            print(f"Ошибка при первоначальном обновлении цен: {e}")
+        
+        # Останавливаем предыдущие webhook/polling соединения
+        try:
+            await self.bot_instance.bot.delete_webhook(drop_pending_updates=True)
+            print("Предыдущие соединения закрыты")
+        except Exception as e:
+            print(f"Предупреждение при закрытии предыдущих соединений: {e}")
+        
+        try:
+            await self.bot_instance.dp.start_polling(
+                self.bot_instance.bot,
+                drop_pending_updates=True
+            )
         finally:
+            await self.bot_instance.bot.session.close()
             self.scheduler.shutdown()
 
 

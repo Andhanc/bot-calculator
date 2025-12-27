@@ -167,7 +167,7 @@ class CreateDatabase:
     async def async_main(self):
         async with self.engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            print("✅ Таблицы успешно созданы")
+            print("[OK] Таблицы успешно созданы")
 
         async with self.async_session() as session:
             from sqlalchemy import select
@@ -177,7 +177,7 @@ class CreateDatabase:
                 existing_data = result.scalars().first()
                 
                 if not existing_data:
-                    print("📝 Добавляем начальные данные в algorithm_data...")
+                    print("[INFO] Добавляем начальные данные в algorithm_data...")
                     session.add_all(
                         [
                             AlgorithmData(
@@ -225,19 +225,19 @@ class CreateDatabase:
                         ]
                     )
                     await session.commit()
-                    print("✅ Начальные данные algorithm_data добавлены")
+                    print("[OK] Начальные данные algorithm_data добавлены")
                 else:
-                    print("ℹ️ Данные в algorithm_data уже существуют")
+                    print("[INFO] Данные в algorithm_data уже существуют")
                     
             except Exception as e:
-                print(f"❌ Ошибка при работе с algorithm_data: {e}")
+                print(f"[ERROR] Ошибка при работе с algorithm_data: {e}")
                 await session.rollback()
 
             try:
                 coins_exist = await session.execute(select(Coin))
                 if not coins_exist.scalars().first():
-                    print("📝 Добавляем начальные данные в coins...")
-                    print("ℹ️ Цены будут получены из CoinGecko API при инициализации")
+                    print("[INFO] Добавляем начальные данные в coins...")
+                    print("[INFO] Цены будут получены из API при инициализации")
                     # Монеты создаются без цен, цены будут получены из API через CoinGeckoService
                     session.add_all(
                         [
@@ -324,12 +324,12 @@ class CreateDatabase:
                         ]
                     )
                     await session.commit()
-                    print("✅ Начальные данные coins добавлены (цены будут обновлены из API)")
+                    print("[OK] Начальные данные coins добавлены (цены будут обновлены из API)")
                 else:
-                    print("ℹ️ Данные в coins уже существуют")
+                    print("[INFO] Данные в coins уже существуют")
                     
             except Exception as e:
-                print(f"❌ Ошибка при работе с coins: {e}")
+                print(f"[ERROR] Ошибка при работе с coins: {e}")
                 await session.rollback()
 
-        print("🎉 База данных успешно инициализирована!")
+        print("[OK] База данных успешно инициализирована!")

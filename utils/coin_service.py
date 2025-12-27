@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import aiohttp
 from sqlalchemy.ext.asyncio import async_sessionmaker
@@ -17,9 +17,29 @@ class CoinGeckoService:
         self.db_session_maker = settings.db_manager.async_session
         self.coin_req = CoinReq(settings.db_manager.async_session)
         self.user_req = UserReq(settings.db_manager.async_session)
-        self.base_url = "https://api.coingecko.com/api/v3"
-        # Расширенный маппинг всех монет, поддерживаемых ботом
-        self.coin_mapping = {
+        # Binance P2P API для получения курсов монет
+        self.binance_p2p_url = "https://p2p.binance.com/bapi/c2c/v2/friendly/c2c/adv/search"
+        # ExchangeRate API для получения курсов валют
+        self.exchange_rate_url = "https://api.exchangerate-api.com/v4/latest/USD"
+        # CoinGecko API (используется как fallback и для получения изменения за 24ч)
+        self.coin_gecko_url = "https://api.coingecko.com/api/v3"
+        # Маппинг монет для Binance P2P (asset код)
+        self.binance_coin_mapping = {
+            "BTC": "BTC",
+            "ETH": "ETH",
+            "USDT": "USDT",
+            "DOGE": "DOGE",
+            "LTC": "LTC",
+            "BCH": "BCH",
+            "ETC": "ETC",
+            # Монеты, которые могут быть недоступны на Binance P2P
+            "KAS": "KAS",
+            "BSV": "BSV",
+            "KDA": "KDA",
+            "ETHW": "ETHW",
+        }
+        # Маппинг для CoinGecko (используется для fallback и изменения за 24ч)
+        self.coin_gecko_mapping = {
             "BTC": "bitcoin",
             "ETH": "ethereum",
             "USDT": "tether",
@@ -34,53 +54,327 @@ class CoinGeckoService:
         }
         self.bot = settings.bot
 
-    async def fetch_prices(self) -> Dict[str, Dict]:
-        """Получение цен всех монет из CoinGecko API"""
+    async def get_binance_p2p_price(self, asset: str, fiat: str = "RUB") -> Optional[float]:
+        """Получение цены P2P с Binance. Возвращает среднюю цену из топ-5 объявлений"""
         try:
-            coin_ids = ",".join(self.coin_mapping.values())
             async with aiohttp.ClientSession() as session:
-                async with session.get(
-                    f"{self.base_url}/simple/price",
-                    params={
-                        "ids": coin_ids,
-                        "vs_currencies": "usd,rub",
-                        "include_24hr_change": "true",
-                    },
-                    timeout=30,
+                headers = {
+                    "Content-Type": "application/json",
+                    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+                }
+                
+                # Получаем объявления на продажу (SELL) - когда продавец продает монету за фиат
+                # Это цена, по которой можно купить монету (цена для покупателя)
+                payload = {
+                    "asset": asset,
+                    "fiat": fiat,
+                    "merchantCheck": False,
+                    "page": 1,
+                    "payTypes": [],
+                    "publisherType": None,
+                    "rows": 10,  # Получаем больше объявлений для более точной средней цены
+                    "tradeType": "SELL",
+                    "transAmount": "",
+                }
+                
+                async with session.post(
+                    self.binance_p2p_url,
+                    json=payload,
+                    headers=headers,
+                    timeout=15,
                 ) as response:
-                    response.raise_for_status()
+                    if response.status != 200:
+                        logger.warning(
+                            f"Binance P2P вернул статус {response.status} для {asset}/{fiat}"
+                        )
+                        return None
+                    
                     data = await response.json()
-                    logger.info(f"Получены цены для {len(data)} монет из CoinGecko")
-                    return data
+                    
+                    # Логируем структуру ответа при первой ошибке для отладки
+                    if not data.get("success"):
+                        error_msg = data.get("message", "Unknown error")
+                        logger.debug(
+                            f"Binance P2P API error для {asset}/{fiat}: {error_msg}. "
+                            f"Response: {data}"
+                        )
+                    
+                    if data.get("success") and data.get("data"):
+                        ads = data["data"]
+                        if ads and len(ads) > 0:
+                            logger.debug(
+                                f"Получено {len(ads)} объявлений для {asset}/{fiat} с Binance P2P"
+                            )
+                            # Берем среднюю цену из топ-5 объявлений для более точной оценки
+                            prices = []
+                            for idx, ad in enumerate(ads[:5]):
+                                adv = ad.get("adv", {})
+                                price = adv.get("price")
+                                if price:
+                                    try:
+                                        price_float = float(price)
+                                        if price_float > 0:
+                                            prices.append(price_float)
+                                            logger.debug(
+                                                f"Объявление {idx+1} для {asset}/{fiat}: {price_float}"
+                                            )
+                                    except (ValueError, TypeError) as e:
+                                        logger.debug(
+                                            f"Не удалось преобразовать цену в float: {price}, ошибка: {e}"
+                                        )
+                                        continue
+                            
+                            if prices:
+                                # Берем минимальную цену (низ рынка) - самую низкую цену из объявлений
+                                prices.sort()
+                                min_price = prices[0]  # Первая цена после сортировки - минимальная
+                                
+                                logger.info(
+                                    f"Получена цена {asset}/{fiat} с Binance P2P (низ рынка): "
+                                    f"{min_price:.2f} (минимальная из {len(prices)} объявлений, "
+                                    f"диапазон: {min_price:.2f} - {prices[-1]:.2f})"
+                                )
+                                return min_price
+                            else:
+                                logger.warning(
+                                    f"Не найдено валидных цен в объявлениях для {asset}/{fiat}. "
+                                    f"Структура первого объявления: {ads[0] if ads else 'нет данных'}"
+                                )
+                    else:
+                        # Детальное логирование при отсутствии данных
+                        logger.warning(
+                            f"Binance P2P не вернул данные для {asset}/{fiat}. "
+                            f"Success: {data.get('success')}, "
+                            f"Message: {data.get('message', 'нет сообщения')}, "
+                            f"Response keys: {list(data.keys())}"
+                        )
+                        # Логируем первые 200 символов ответа для отладки
+                        response_str = str(data)[:200]
+                        logger.debug(f"Фрагмент ответа API: {response_str}")
+                    
+                    return None
+        except aiohttp.ClientTimeout:
+            logger.warning(f"Таймаут при получении цены {asset}/{fiat} с Binance P2P")
+            return None
         except aiohttp.ClientError as e:
-            logger.error(f"Ошибка сети при получении цен с CoinGecko: {e}")
-            return {}
+            logger.error(f"Ошибка сети при получении цены {asset}/{fiat} с Binance P2P: {e}")
+            return None
         except Exception as e:
-            logger.error(f"Ошибка при получении цен с CoinGecko: {e}")
+            logger.error(
+                f"Ошибка при получении цены {asset}/{fiat} с Binance P2P: {e}",
+                exc_info=True
+            )
+            return None
+
+    async def get_coin_gecko_prices_batch(
+        self, coin_ids: List[str], max_retries: int = 3
+    ) -> Dict[str, Dict[str, float]]:
+        """Получение цен нескольких монет из CoinGecko одним запросом (batch)"""
+        if not coin_ids:
             return {}
+        
+        for attempt in range(max_retries):
+            try:
+                async with aiohttp.ClientSession() as session:
+                    # Объединяем все coin_id в один запрос
+                    ids_param = ",".join(coin_ids)
+                    
+                    async with session.get(
+                        f"{self.coin_gecko_url}/simple/price",
+                        params={
+                            "ids": ids_param,
+                            "vs_currencies": "usd,rub",
+                            "include_24hr_change": "true",
+                        },
+                        timeout=15,
+                    ) as response:
+                        # Обработка 429 (Too Many Requests)
+                        if response.status == 429:
+                            retry_after = int(response.headers.get("Retry-After", 60))
+                            wait_time = retry_after + (attempt * 10)  # Увеличиваем задержку с каждой попыткой
+                            logger.warning(
+                                f"CoinGecko rate limit (429). Ожидание {wait_time} секунд перед повтором {attempt + 1}/{max_retries}"
+                            )
+                            if attempt < max_retries - 1:
+                                await asyncio.sleep(wait_time)
+                                continue
+                            else:
+                                logger.error("Превышено количество попыток для CoinGecko")
+                                return {}
+                        
+                        response.raise_for_status()
+                        data = await response.json()
+                        
+                        result = {}
+                        for coin_id in coin_ids:
+                            if coin_id in data:
+                                result[coin_id] = {
+                                    "usd": data[coin_id].get("usd", 0.0),
+                                    "rub": data[coin_id].get("rub", 0.0),
+                                    "usd_24h_change": data[coin_id].get("usd_24h_change", 0.0),
+                                }
+                        return result
+            except aiohttp.ClientError as e:
+                logger.error(f"Ошибка сети при получении цен с CoinGecko (попытка {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5 * (attempt + 1))  # Экспоненциальная задержка
+                    continue
+            except Exception as e:
+                logger.error(f"Ошибка при получении цен с CoinGecko (попытка {attempt + 1}/{max_retries}): {e}")
+                if attempt < max_retries - 1:
+                    await asyncio.sleep(5 * (attempt + 1))
+                    continue
+        
+        return {}
+
+    async def get_coin_gecko_price(self, coin_id: str) -> Optional[Dict[str, float]]:
+        """Получение цены одной монеты из CoinGecko (fallback для обратной совместимости)"""
+        result = await self.get_coin_gecko_prices_batch([coin_id])
+        return result.get(coin_id)
+
+    async def fetch_prices(self) -> Dict[str, Dict]:
+        """Получение цен всех монет из Binance P2P API (верхняя граница стакана)"""
+        prices = {}
+        
+        # Получаем сохраненные цены из БД на случай, если API недоступен
+        existing_coins = await self.coin_req.get_all_coins()
+        saved_prices = {
+            coin.symbol: {
+                "usd": coin.current_price_usd or 0.0,
+                "rub": coin.current_price_rub or 0.0,
+                "usd_24h_change": coin.price_change_24h or 0.0,
+            }
+            for coin in existing_coins
+        }
+        
+        # Получаем курс USD/RUB для конвертации
+        usd_to_rub = await self.get_usd_rub_rate()
+        if not usd_to_rub or usd_to_rub <= 0:
+            logger.warning("Не удалось получить курс USD/RUB, используем значение по умолчанию 80")
+            usd_to_rub = 80.0
+        
+        # Получаем все изменения за 24ч из CoinGecko одним batch запросом
+        coin_ids_for_24h = [
+            self.coin_gecko_mapping[symbol]
+            for symbol in self.binance_coin_mapping.keys()
+            if symbol in self.coin_gecko_mapping
+        ]
+        
+        logger.info("Получение изменений за 24ч из CoinGecko...")
+        gecko_24h_changes = await self.get_coin_gecko_prices_batch(coin_ids_for_24h)
+        
+        # Создаем маппинг symbol -> 24h change
+        symbol_to_24h_change = {}
+        for symbol, gecko_id in self.coin_gecko_mapping.items():
+            if gecko_id in gecko_24h_changes:
+                symbol_to_24h_change[symbol] = gecko_24h_changes[gecko_id].get("usd_24h_change", 0.0)
+        
+        # Получаем цены для каждой монеты с Binance P2P
+        for symbol, asset in self.binance_coin_mapping.items():
+            try:
+                # Сначала пытаемся получить цену в RUB с Binance P2P
+                p2p_price_rub = await self.get_binance_p2p_price(asset, "RUB")
+                
+                # Добавляем задержку между запросами к Binance P2P, чтобы не перегружать API
+                await asyncio.sleep(0.6)
+                
+                if p2p_price_rub and p2p_price_rub > 0:
+                    # Конвертируем в USD
+                    price_usd = p2p_price_rub / usd_to_rub
+                    
+                    # Используем изменение за 24ч из batch запроса к CoinGecko
+                    price_change = symbol_to_24h_change.get(symbol, saved_prices.get(symbol, {}).get("usd_24h_change", 0.0))
+                    
+                    prices[symbol] = {
+                        "usd": price_usd,
+                        "rub": p2p_price_rub,
+                        "usd_24h_change": price_change,
+                    }
+                    logger.info(f"Цена {symbol} (Binance P2P RUB): ${price_usd:.2f} / ₽{p2p_price_rub:.2f} (24h: {price_change:+.1f}%)")
+                else:
+                    # Попробуем получить цену в USD, если RUB недоступна
+                    logger.debug(f"Пробуем получить цену {symbol} в USD с Binance P2P...")
+                    p2p_price_usd_str = await self.get_binance_p2p_price(asset, "USD")
+                    await asyncio.sleep(0.6)
+                    
+                    if p2p_price_usd_str and p2p_price_usd_str > 0:
+                        # Цена уже в USD, конвертируем в RUB
+                        price_usd = float(p2p_price_usd_str)
+                        price_rub = price_usd * usd_to_rub
+                        price_change = symbol_to_24h_change.get(symbol, saved_prices.get(symbol, {}).get("usd_24h_change", 0.0))
+                        
+                        prices[symbol] = {
+                            "usd": price_usd,
+                            "rub": price_rub,
+                            "usd_24h_change": price_change,
+                        }
+                        logger.info(f"Цена {symbol} (Binance P2P USD): ${price_usd:.2f} / ₽{price_rub:.2f} (24h: {price_change:+.1f}%)")
+                    else:
+                        # Fallback на CoinGecko, если нет на Binance P2P
+                        logger.warning(f"Монета {symbol} недоступна на Binance P2P (RUB/USD), используем CoinGecko")
+                        if symbol in self.coin_gecko_mapping:
+                            gecko_id = self.coin_gecko_mapping[symbol]
+                            if gecko_id in gecko_24h_changes:
+                                gecko_data = gecko_24h_changes[gecko_id]
+                                prices[symbol] = gecko_data
+                                logger.info(f"Цена {symbol} из CoinGecko: ${gecko_data.get('usd', 0):,.2f} / ₽{gecko_data.get('rub', 0):,.0f}")
+                            else:
+                                # Если CoinGecko тоже недоступен, используем сохраненные значения
+                                if symbol in saved_prices and saved_prices[symbol]["usd"] > 0:
+                                    prices[symbol] = saved_prices[symbol]
+                                    logger.warning(f"Используем сохраненные значения для {symbol}")
+                                else:
+                                    logger.error(f"Не удалось получить цену для {symbol} ни из одного источника")
+                
+            except Exception as e:
+                logger.error(f"Ошибка при получении цены для {symbol}: {e}", exc_info=True)
+                # Используем сохраненные значения при ошибке
+                if symbol in saved_prices and saved_prices[symbol]["usd"] > 0:
+                    prices[symbol] = saved_prices[symbol]
+                    logger.warning(f"Используем сохраненные значения для {symbol} из-за ошибки")
+                continue
+        
+        logger.info(f"Получены цены для {len(prices)} монет")
+        return prices
 
     async def update_coin_prices_and_notify(self):
         try:
+            logger.info("Начало обновления цен монет...")
             prices = await self.fetch_prices()
+            
             if not prices:
-                logger.warning("Не удалось получить цены с CoinGecko")
-                return
+                logger.warning("Не удалось получить цены, проверяем сохраненные значения в БД")
+                # Если не удалось получить цены, не обновляем БД - оставляем старые значения
+                existing_coins = await self.coin_req.get_all_coins()
+                if existing_coins:
+                    logger.info(f"Используем сохраненные цены для {len(existing_coins)} монет")
+                    return
+                else:
+                    logger.error("Нет сохраненных цен и не удалось получить новые")
+                    return
 
             update_data = {}
-            for symbol, coin_gecko_id in self.coin_mapping.items():
-                if coin_gecko_id in prices:
-                    coin_data = prices[coin_gecko_id]
-                    update_data[symbol] = {
-                        "price_usd": coin_data.get("usd", 0.0),
-                        "price_rub": coin_data.get("rub", 0.0),
-                        "price_change": coin_data.get("usd_24h_change", 0.0),
-                    }
+            for symbol in self.binance_coin_mapping.keys():
+                if symbol in prices:
+                    coin_data = prices[symbol]
+                    # Обновляем только если цена больше 0
+                    if coin_data.get("usd", 0.0) > 0 or coin_data.get("rub", 0.0) > 0:
+                        update_data[symbol] = {
+                            "price_usd": coin_data.get("usd", 0.0),
+                            "price_rub": coin_data.get("rub", 0.0),
+                            "price_change": coin_data.get("usd_24h_change", 0.0),
+                        }
+                    else:
+                        logger.warning(f"Цена для {symbol} равна 0, пропускаем обновление")
 
-            await self.coin_req.update_coin_prices(update_data)
-            logger.info(f"Цены обновлены для {len(update_data)} монет")
-            await self.send_price_notification(update_data)
+            if update_data:
+                await self.coin_req.update_coin_prices(update_data)
+                logger.info(f"Цены обновлены для {len(update_data)} монет")
+                await self.send_price_notification(update_data)
+            else:
+                logger.warning("Нет данных для обновления цен")
         except Exception as e:
-            logger.error(f"Ошибка при обновлении цен: {e}")
+            logger.error(f"Ошибка при обновлении цен: {e}", exc_info=True)
 
     async def send_price_notification(self, prices_data: Dict[str, Dict]):
         try:
@@ -134,16 +428,33 @@ class CoinGeckoService:
             logger.error(f"Ошибка при отправке уведомлений: {e}")
 
     async def get_usd_rub_rate(self) -> float:
+        """Получение курса USD/RUB через exchangerate-api.com"""
         try:
             async with aiohttp.ClientSession() as session:
                 async with session.get(
-                    f"{self.base_url}/simple/price",
-                    params={"ids": "tether", "vs_currencies": "rub"},
+                    self.exchange_rate_url,
                     timeout=10,
                 ) as response:
                     response.raise_for_status()
                     data = await response.json()
-                    return data.get("tether", {}).get("rub", 80.0)
+                    rub_rate = data.get("rates", {}).get("RUB")
+                    if rub_rate and rub_rate > 0:
+                        logger.info(f"Получен курс USD/RUB: {rub_rate:.2f}")
+                        return float(rub_rate)
+                    else:
+                        logger.warning("Не удалось получить курс RUB из exchangerate-api")
+                        return 80.0
+        except aiohttp.ClientError as e:
+            logger.error(f"Ошибка сети при получении курса USD/RUB: {e}")
+            # Fallback на Binance P2P для USDT/RUB
+            try:
+                usdt_rub = await self.get_binance_p2p_price("USDT", "RUB")
+                if usdt_rub and usdt_rub > 0:
+                    logger.info(f"Получен курс USDT/RUB с Binance P2P (fallback): {usdt_rub:.2f}")
+                    return float(usdt_rub)
+            except Exception as fallback_error:
+                logger.error(f"Ошибка при fallback на Binance P2P: {fallback_error}")
+            return 80.0
         except Exception as e:
             logger.error(f"Ошибка при получении курса USD/RUB: {e}")
             return 80.0
@@ -171,17 +482,16 @@ class CoinGeckoService:
                 ]
                 
                 # Получаем актуальные цены из API
-                logger.info("Получение актуальных цен монет из CoinGecko API...")
+                logger.info("Получение актуальных цен монет из Binance P2P API...")
                 prices = await self.fetch_prices()
                 
                 # Создаем монеты с актуальными ценами или значениями по умолчанию
                 for coin_data in coins_to_add:
                     symbol = coin_data["symbol"]
-                    coin_gecko_id = coin_data["coin_gecko_id"]
                     
                     # Получаем цену из API, если доступна
-                    if prices and coin_gecko_id in prices:
-                        price_data = prices[coin_gecko_id]
+                    if prices and symbol in prices:
+                        price_data = prices[symbol]
                         coin_data["current_price_usd"] = price_data.get("usd", 0.0)
                         coin_data["current_price_rub"] = price_data.get("rub", 0.0)
                         coin_data["price_change_24h"] = price_data.get("usd_24h_change", 0.0)
@@ -198,10 +508,5 @@ class CoinGeckoService:
                 
                 await session.commit()
                 logger.info(f"Монеты инициализированы с актуальными ценами из API")
-                
-                # Обновляем цены сразу после инициализации
-                await self.update_coin_prices_and_notify()
             else:
-                logger.info("Монеты уже существуют, обновляем цены...")
-                # Обновляем цены для существующих монет
-                await self.update_coin_prices_and_notify()
+                logger.info("Монеты уже существуют")
