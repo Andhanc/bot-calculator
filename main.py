@@ -30,9 +30,9 @@ class BotRunner:
         self.setup_scheduler()
 
     def setup_scheduler(self):
-        # Обновление цен и отправка курсов каждые 10 минут
+        # Обновление цен и отправка курсов каждые 5 минут
         # Первое обновление произойдет сразу при старте (misfire_grace_time=None)
-        trigger = IntervalTrigger(minutes=10)
+        trigger = IntervalTrigger(minutes=5)
         self.scheduler.add_job(
             self.coin_service.update_coin_prices_and_notify,
             trigger,
@@ -43,7 +43,7 @@ class BotRunner:
     async def run(self):
         await self.setup()
         self.scheduler.start()
-        print("Планировщик запущен. Цены и курсы будут обновляться каждые 10 минут")
+        print("Планировщик запущен. Цены и курсы будут обновляться каждые 5 минут")
         
         # Обновляем цены сразу при старте
         print("Первоначальное обновление цен...")

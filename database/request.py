@@ -1,7 +1,7 @@
 import re
 from asyncio import Lock
 from datetime import datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Set
 
 from sqlalchemy import and_, delete, select, update
 from sqlalchemy.exc import IntegrityError
@@ -29,10 +29,10 @@ class UserReq:
         self.lock = Lock()
 
     async def user_exists(self, uid: int) -> bool:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(select(User).where(User.uid == uid))
-                return res.scalar() is not None
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(select(User).where(User.uid == uid))
+            return res.scalar() is not None
 
     async def add_user(self, uid: int, uname: str) -> bool:
         async with self.lock:
@@ -47,14 +47,14 @@ class UserReq:
                     return False
 
     async def is_admin(self, uid: int) -> bool:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(User).where(
-                        and_(User.uid == uid, User.status == UserStatus.ADMIN)
-                    )
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(User).where(
+                    and_(User.uid == uid, User.status == UserStatus.ADMIN)
                 )
-                return res.scalar() is not None
+            )
+            return res.scalar() is not None
 
     async def toggle_notifications(self, uid: int) -> bool:
         async with self.lock:
@@ -68,24 +68,24 @@ class UserReq:
                 return False
 
     async def get_user_notifications_status(self, uid: int) -> bool:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(User.notifications).where(User.uid == uid)
-                )
-                return res.scalar() or False
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(User.notifications).where(User.uid == uid)
+            )
+            return res.scalar() or False
 
     async def get_all_users(self) -> List[User]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(select(User))
-                return list(res.scalars().all())
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(select(User))
+            return list(res.scalars().all())
 
     async def get_user_by_uid(self, uid: int) -> Optional[User]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(select(User).where(User.uid == uid))
-                return res.scalar()
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(select(User).where(User.uid == uid))
+            return res.scalar()
 
 
 class CalculatorReq:
@@ -94,14 +94,14 @@ class CalculatorReq:
         self.lock = Lock()
 
     async def get_manufacturers(self) -> List[Manufacturer]:
-        async with self.lock:
-            return list(Manufacturer)
+        # Чтение - блокировка не нужна
+        return list(Manufacturer)
 
     async def get_model_lines_by_manufacturer(
         self, manufacturer: Manufacturer
     ) -> List[AsicModelLine]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 # Получаем только линейки, в которых есть хотя бы одна активная модель
                 res = await session.execute(
                     select(AsicModelLine)
@@ -126,8 +126,8 @@ class CalculatorReq:
     async def get_asic_models_by_model_line(
         self, model_line_id: int
     ) -> List[AsicModel]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 res = await session.execute(
                     select(AsicModel)
                     .where(AsicModel.model_line_id == model_line_id)
@@ -136,24 +136,24 @@ class CalculatorReq:
                 return list(res.scalars().all())
 
     async def get_model_line_by_id(self, model_line_id: int) -> Optional[AsicModelLine]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 res = await session.execute(
                     select(AsicModelLine).where(AsicModelLine.id == model_line_id)
                 )
                 return res.scalar()
 
     async def get_all_asic_models(self) -> List[AsicModel]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 res = await session.execute(
                     select(AsicModel).where(AsicModel.is_active == True)
                 )
                 return list(res.scalars().all())
 
     async def get_asic_model_by_id(self, model_id: int) -> Optional[AsicModel]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 res = await session.execute(
                     select(AsicModel).where(AsicModel.id == model_id)
                 )
@@ -229,22 +229,34 @@ class CalculatorReq:
                 return False
 
     async def get_algorithms(self) -> List[Algorithm]:
-        async with self.lock:
-            return list(Algorithm)
+        # Чтение - блокировка не нужна
+        return list(Algorithm)
 
     async def get_algorithm_data(self, algorithm: Algorithm) -> Optional[AlgorithmData]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 res = await session.execute(
                     select(AlgorithmData).where(AlgorithmData.algorithm == algorithm)
                 )
                 return res.scalar()
 
     async def get_algorithm_data_all(self) -> List[AlgorithmData]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(select(AlgorithmData))
-                return list(res.scalars().all())
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(select(AlgorithmData))
+            return list(res.scalars().all())
+    
+    async def get_algorithm_data_batch(self, algorithms: Set[Algorithm]) -> Dict[Algorithm, AlgorithmData]:
+        """Получить данные алгоритмов одним запросом"""
+        # Чтение - блокировка не нужна
+        if not algorithms:
+            return {}
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(AlgorithmData).where(AlgorithmData.algorithm.in_(algorithms))
+            )
+            algo_data_list = res.scalars().all()
+            return {data.algorithm: data for data in algo_data_list}
 
     async def update_algorithm_data(
         self,
@@ -297,8 +309,8 @@ class CalculatorReq:
                 return True
 
     async def get_link(self) -> str:
-        async with self.lock:
-            async with self.db_session_maker() as session:
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
                 # Берем последнюю (или единственную) запись из таблицы link
                 res = await session.execute(select(Link).order_by(Link.id.desc()))
                 data = res.scalars().first()
@@ -310,12 +322,12 @@ class CalculatorReq:
                 return data.link
 
     async def get_coin_by_symbol(self, symbol: str) -> Optional[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(Coin).where(Coin.symbol == symbol.upper())
-                )
-                return res.scalar()
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(Coin).where(Coin.symbol == symbol.upper())
+            )
+            return res.scalar()
 
 
 class CoinReq:
@@ -340,26 +352,38 @@ class CoinReq:
                 await session.commit()
 
     async def get_all_coins(self) -> List[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(select(Coin))
-                return list(res.scalars().all())
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(select(Coin))
+            return list(res.scalars().all())
 
     async def get_coin_by_symbol(self, symbol: str) -> Optional[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(Coin).where(Coin.symbol == symbol.upper())
-                )
-                return res.scalar()
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(Coin).where(Coin.symbol == symbol.upper())
+            )
+            return res.scalar()
 
     async def get_coin_by_gecko_id(self, gecko_id: str) -> Optional[Coin]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(Coin).where(Coin.coin_gecko_id == gecko_id.lower())
-                )
-                return res.scalar()
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(Coin).where(Coin.coin_gecko_id == gecko_id.lower())
+            )
+            return res.scalar()
+    
+    async def get_coins_by_symbols(self, symbols: List[str]) -> Dict[str, Coin]:
+        """Получить несколько монет одним запросом"""
+        # Чтение - блокировка не нужна
+        if not symbols:
+            return {}
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(Coin).where(Coin.symbol.in_([s.upper() for s in symbols]))
+            )
+            coins = res.scalars().all()
+            return {coin.symbol: coin for coin in coins}
 
 
 class SellRequestReq:
@@ -391,14 +415,14 @@ class SellRequestReq:
                 return request.id
 
     async def get_pending_requests(self) -> List[SellRequest]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(SellRequest)
-                    .where(SellRequest.status == "pending")
-                    .order_by(SellRequest.created_at.desc())
-                )
-                return list(res.scalars().all())
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(SellRequest)
+                .where(SellRequest.status == "pending")
+                .order_by(SellRequest.created_at.desc())
+            )
+            return list(res.scalars().all())
 
     async def update_request_status(self, request_id: int, status: str) -> bool:
         async with self.lock:
@@ -438,14 +462,14 @@ class UsedDeviceGuideReq:
         self.lock = Lock()
 
     async def get_guide(self) -> Optional[UsedDeviceGuide]:
-        async with self.lock:
-            async with self.db_session_maker() as session:
-                res = await session.execute(
-                    select(UsedDeviceGuide).order_by(
-                        UsedDeviceGuide.last_updated.desc()
-                    )
+        # Чтение - блокировка не нужна
+        async with self.db_session_maker() as session:
+            res = await session.execute(
+                select(UsedDeviceGuide).order_by(
+                    UsedDeviceGuide.last_updated.desc()
                 )
-                return res.scalar()
+            )
+            return res.scalar()
 
     async def update_guide(self, title: str, content: str, updated_by: int) -> int:
         async with self.lock:

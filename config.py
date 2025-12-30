@@ -14,7 +14,7 @@ def get_db_url():
     database_url = os.getenv("DATABASE_URL")
     if database_url:
         return database_url
-    
+        e
     # Проверяем, есть ли настройки PostgreSQL
     postgres_user = os.getenv("POSTGRES_USER")
     postgres_password = os.getenv("POSTGRES_PASSWORD")

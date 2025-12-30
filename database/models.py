@@ -205,7 +205,7 @@ class CreateDatabase:
                                 algorithm=Algorithm.SCRYPT,
                                 default_coin="LTC",
                                 difficulty=15_000_000,
-                                network_hashrate=3_464_270,  # GH/s (≈ 3,464 TH/s) - актуальное значение для LTC
+                                network_hashrate=2_684_855,  # GH/s (≈ 2,685 TH/s) - обновлено для соответствия capminer.ru
                                 block_reward=6.25,
                             ),
                             AlgorithmData(

@@ -180,8 +180,7 @@ class Client:
         self.dp.message(CalculatorState.input_power)(self.calc_power_handler)
 
         # Обработчики для формы продажи оборудования
-        # Регистрируем БЕЗ фильтра на content_type, чтобы обрабатывать все сообщения
-        # Проверка типа будет внутри обработчиков
+        # Регистрируем без фильтра content_type, проверка будет внутри обработчиков
         self.dp.message(SellForm.device)(self.sell_device_handler)
         self.dp.message(SellForm.price)(self.sell_price_handler)
         self.dp.message(SellForm.condition)(self.sell_condition_handler)
@@ -837,141 +836,226 @@ class Client:
 
     async def calc_electricity_handler(self, message: types.Message, state: FSMContext):
         try:
-            electricity_price = float(message.text.replace(",", "."))
-            if electricity_price <= 0:
-                raise ValueError
-        except ValueError:
-            await message.answer(
-                "❌ Неверный формат. Введите число больше нуля:",
-                reply_markup=await CalculatorKB.electricity_input(),
-            )
-            return
-
-        await state.update_data(electricity_price=electricity_price)
-        data = await state.get_data()
-
-        coin_service = CoinGeckoService(self.settings)
-        usd_to_rub = await coin_service.get_usd_rub_rate()
-
-        if data.get("method") == "asic":
-            model = data["model"]
-            model_line = await self.calculator_req.get_model_line_by_id(
-                model.model_line_id
-            )
-
-            coin_data = {}
-            coin_symbols = []
-
-            if model.get_coin and model.get_coin.strip():
-                # Собираем все монеты из get_coin
-                all_coins = []
-                for coin_str in model.get_coin.split(","):
-                    coin_symbol = coin_str.strip().upper()
-                    coin = await self.calculator_req.get_coin_by_symbol(coin_symbol)
-                    if coin:
-                        algo_data = await self.calculator_req.get_algorithm_data(
-                            coin.algorithm
-                        )
-                        if algo_data:
-                            all_coins.append({
-                                "symbol": coin_symbol,
-                                "coin": coin,
-                                "algo_data": algo_data
-                            })
-                
-                # Применяем фильтрацию монет согласно правилам
-                filtered_coins = await self._filter_coins_for_miner(model_line, all_coins)
-                
-                # Формируем coin_data из отфильтрованных монет
-                for coin_info in filtered_coins:
-                    coin_symbol = coin_info["symbol"]
-                    coin = coin_info["coin"]
-                    algo_data = coin_info["algo_data"]
-                    coin_data[coin_symbol] = {
-                        "price": coin.current_price_usd,
-                        "network_hashrate": algo_data.network_hashrate,
-                        "block_reward": algo_data.block_reward,
-                        "algorithm": coin.algorithm.value.lower(),
-                    }
-                    coin_symbols.append(coin_symbol)
-            else:
-                algo_data = await self.calculator_req.get_algorithm_data(
-                    model_line.algorithm
+            # Проверка типа данных - только текстовые сообщения
+            if not message.text:
+                await message.answer(
+                    "❌ Пожалуйста, отправьте текстовое сообщение с стоимостью электроэнергии.",
+                    reply_markup=await CalculatorKB.electricity_input(),
                 )
-                coin = await self.calculator_req.get_coin_by_symbol(
-                    algo_data.default_coin
+                return
+            
+            try:
+                electricity_price = float(message.text.replace(",", "."))
+                if electricity_price <= 0:
+                    raise ValueError
+            except ValueError:
+                await message.answer(
+                    "❌ Неверный формат. Введите число больше нуля:",
+                    reply_markup=await CalculatorKB.electricity_input(),
                 )
-                if coin and algo_data:
-                    coin_data[coin.symbol] = {
-                        "price": coin.current_price_usd,
-                        "network_hashrate": algo_data.network_hashrate,
-                        "block_reward": algo_data.block_reward,
-                        "algorithm": model_line.algorithm.value.lower(),
-                    }
-                    coin_symbols.append(coin.symbol)
-
-            if not coin_symbols:
-                await message.answer("❌ Не удалось найти данные о монетах")
                 return
 
-            # Передаем правильный алгоритм в калькулятор
-            result = MiningCalculator.calculate_profitability(
-                hash_rate=model.hash_rate,
-                power_consumption=model.power_consumption,
-                electricity_price_rub=electricity_price,
-                coin_data=coin_data,
-                usd_to_rub=usd_to_rub,
-                algorithm=model_line.algorithm.value.lower()  # Передаем алгоритм
-            )
+            await state.update_data(electricity_price=electricity_price)
+            data = await state.get_data()
 
-            text = (
-                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
-            )
-            text += MiningCalculator.format_result(result, coin_symbols, usd_to_rub)
+            coin_service = CoinGeckoService(self.settings)
+            usd_to_rub = await coin_service.get_usd_rub_rate()
 
-        else:
-            algorithm = data["algorithm"]
-            hashrate = data["hashrate"]
-            power = data["power"]
+            if data.get("method") == "asic":
+                model = data["model"]
+                model_line = await self.calculator_req.get_model_line_by_id(
+                    model.model_line_id
+                )
 
-            algo_data = await self.calculator_req.get_algorithm_data(algorithm)
-            coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
+                coin_data = {}
+                coin_symbols = []
 
-            # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
-            # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
-            algorithm_lower = algorithm.value.lower()
-            if algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
-                # Если значение слишком большое (больше 1000), возможно пользователь ввел в TH/s
-                # Конвертируем из TH/s в GH/s
-                if hashrate > 1000:
-                    hashrate = hashrate * 1000  # TH/s -> GH/s
-                # Иначе считаем, что уже в GH/s (как на capminer.ru)
+                if model.get_coin and model.get_coin.strip():
+                    # Оптимизация: загружаем все монеты одним запросом вместо цикла
+                    coin_symbols_list = [s.strip().upper() for s in model.get_coin.split(",")]
+                    # Для Scrypt сразу добавляем DOGE, если есть LTC
+                    if model_line.algorithm == Algorithm.SCRYPT and "LTC" in coin_symbols_list and "DOGE" not in coin_symbols_list:
+                        coin_symbols_list.append("DOGE")
+                    
+                    coins_dict = await self.coin_req.get_coins_by_symbols(coin_symbols_list)
+                    
+                    # Загружаем данные алгоритмов одним запросом
+                    algorithms_set = {coin.algorithm for coin in coins_dict.values() if coin}
+                    algo_data_dict = await self.calculator_req.get_algorithm_data_batch(algorithms_set)
+                    
+                    # Формируем список монет с данными алгоритмов
+                    all_coins = []
+                    for coin_symbol in coin_symbols_list:
+                        coin = coins_dict.get(coin_symbol)
+                        if coin:
+                            algo_data = algo_data_dict.get(coin.algorithm)
+                            if algo_data:
+                                all_coins.append({
+                                    "symbol": coin_symbol,
+                                    "coin": coin,
+                                    "algo_data": algo_data
+                                })
+                    
+                    # Применяем фильтрацию монет согласно правилам
+                    filtered_coins = await self._filter_coins_for_miner(model_line, all_coins)
+                    
+                    # Формируем coin_data из отфильтрованных монет
+                    for coin_info in filtered_coins:
+                        coin_symbol = coin_info["symbol"]
+                        coin = coin_info["coin"]
+                        algo_data = coin_info["algo_data"]
+                        coin_data[coin_symbol] = {
+                            "price": coin.current_price_usd,
+                            "network_hashrate": algo_data.network_hashrate,
+                            "block_reward": algo_data.block_reward,
+                            "algorithm": coin.algorithm.value.lower(),
+                        }
+                        coin_symbols.append(coin_symbol)
+                    
+                    # Для Scrypt добавляем DOGE (если есть LTC) - DOGE уже загружен выше
+                    if model_line.algorithm == Algorithm.SCRYPT and "LTC" in [c["symbol"] for c in filtered_coins]:
+                        doge_coin = coins_dict.get("DOGE")
+                        if doge_coin and "DOGE" not in coin_data:
+                            # LTC и DOGE - это разные сети, поэтому у них разные network_hashrate
+                            # Для DOGE используем актуальное значение network_hashrate из capminer.ru тестов
+                            # DOGE network_hashrate: ~2,958,883 GH/s (не зависит от LTC network_hashrate)
+                            doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                            coin_data["DOGE"] = {
+                                "price": doge_coin.current_price_usd,
+                                "network_hashrate": doge_network_hashrate,  # Отдельный network_hashrate для DOGE
+                                "block_reward": 10000,  # Стандартный block_reward для DOGE
+                                "algorithm": model_line.algorithm.value.lower(),
+                            }
+                            coin_symbols.append("DOGE")
+                else:
+                    algo_data = await self.calculator_req.get_algorithm_data(
+                        model_line.algorithm
+                    )
+                    coin = await self.coin_req.get_coin_by_symbol(
+                        algo_data.default_coin
+                    )
+                    if coin and algo_data:
+                        coin_data[coin.symbol] = {
+                            "price": coin.current_price_usd,
+                            "network_hashrate": algo_data.network_hashrate,
+                            "block_reward": algo_data.block_reward,
+                            "algorithm": model_line.algorithm.value.lower(),
+                        }
+                        coin_symbols.append(coin.symbol)
+                        
+                        # Для Scrypt добавляем DOGE (если default_coin LTC)
+                        if model_line.algorithm == Algorithm.SCRYPT and coin.symbol == "LTC":
+                            doge_coin = await self.coin_req.get_coin_by_symbol("DOGE")
+                            if doge_coin:
+                                # LTC и DOGE - это разные сети, поэтому у них разные network_hashrate
+                                # Для DOGE используем актуальное значение network_hashrate из capminer.ru тестов
+                                # DOGE network_hashrate: ~2,958,883 GH/s (не зависит от LTC network_hashrate)
+                                doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                                coin_data["DOGE"] = {
+                                    "price": doge_coin.current_price_usd,
+                                    "network_hashrate": doge_network_hashrate,  # Отдельный network_hashrate для DOGE
+                                    "block_reward": 10000,  # Стандартный block_reward для DOGE
+                                    "algorithm": model_line.algorithm.value.lower(),
+                                }
+                                coin_symbols.append("DOGE")
 
-            result = MiningCalculator.calculate_profitability(
-                hash_rate=hashrate,
-                power_consumption=power,
-                electricity_price_rub=electricity_price,
-                coin_data={
+                if not coin_symbols:
+                    await message.answer("❌ Не удалось найти данные о монетах")
+                    return
+
+                # Передаем правильный алгоритм в калькулятор
+                result = MiningCalculator.calculate_profitability(
+                    hash_rate=model.hash_rate,
+                    power_consumption=model.power_consumption,
+                    electricity_price_rub=electricity_price,
+                    coin_data=coin_data,
+                    usd_to_rub=usd_to_rub,
+                    algorithm=model_line.algorithm.value.lower()  # Передаем алгоритм
+                )
+
+                text = (
+                    f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
+                )
+                text += MiningCalculator.format_result(result, coin_symbols, usd_to_rub)
+
+            else:
+                algorithm = data["algorithm"]
+                hashrate = data["hashrate"]
+                power = data["power"]
+
+                algo_data = await self.calculator_req.get_algorithm_data(algorithm)
+                coin = await self.coin_req.get_coin_by_symbol(algo_data.default_coin)
+
+                # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
+                # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
+                algorithm_lower = algorithm.value.lower()
+                if algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
+                    # Если значение слишком большое (больше 1000), возможно пользователь ввел в TH/s
+                    # Конвертируем из TH/s в GH/s
+                    if hashrate > 1000:
+                        hashrate = hashrate * 1000  # TH/s -> GH/s
+                    # Иначе считаем, что уже в GH/s (как на capminer.ru)
+
+                # Формируем coin_data
+                coin_data_input = {
                     coin.symbol: {
                         "price": coin.current_price_usd,
                         "network_hashrate": algo_data.network_hashrate,
                         "block_reward": algo_data.block_reward,
                         "algorithm": algorithm.value.lower(),
                     }
-                },
-                usd_to_rub=usd_to_rub,
-                algorithm=algorithm.value.lower()  # Передаем алгоритм
-            )
+                }
+                
+                # Для Scrypt добавляем DOGE (если default_coin LTC)
+                display_symbols = [coin.symbol]
+                if algorithm == Algorithm.SCRYPT and coin.symbol == "LTC":
+                    doge_coin = await self.coin_req.get_coin_by_symbol("DOGE")
+                    if doge_coin:
+                        # LTC и DOGE - это разные сети, поэтому у них разные network_hashrate
+                        # Для DOGE используем актуальное значение network_hashrate из capminer.ru тестов
+                        # DOGE network_hashrate: ~2,958,883 GH/s (не зависит от LTC network_hashrate)
+                        doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                        coin_data_input["DOGE"] = {
+                            "price": doge_coin.current_price_usd,
+                            "network_hashrate": doge_network_hashrate,  # Отдельный network_hashrate для DOGE
+                            "block_reward": 10000,  # Стандартный block_reward для DOGE
+                            "algorithm": algorithm.value.lower(),
+                        }
+                        display_symbols.append("DOGE")
 
-            text = (
-                f"⚙️ **Алгоритм:** {algorithm.value}\n"
-            )
-            text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
+                result = MiningCalculator.calculate_profitability(
+                    hash_rate=hashrate,
+                    power_consumption=power,
+                    electricity_price_rub=electricity_price,
+                    coin_data=coin_data_input,
+                    usd_to_rub=usd_to_rub,
+                    algorithm=algorithm.value.lower()  # Передаем алгоритм
+                )
+                text = (
+                    f"⚙️ **Алгоритм:** {algorithm.value}\n"
+                )
+                text += MiningCalculator.format_result(result, display_symbols, usd_to_rub)
 
-        await message.answer(text, reply_markup=await CalculatorKB.result_menu())
-        await state.set_state(CalculatorState.show_result)
+            await message.answer(text, reply_markup=await CalculatorKB.result_menu())
+            await state.set_state(CalculatorState.show_result)
+        except Exception as e:
+            print(f"Ошибка в calc_electricity_handler: {e}")
+            import traceback
+            traceback.print_exc()
+            await message.answer(
+                "❌ Произошла ошибка при расчете. Попробуйте еще раз.",
+                reply_markup=await CalculatorKB.electricity_input(),
+            )
         
     async def calc_power_handler(self, message: types.Message, state: FSMContext):
+        # Проверка типа данных - только текстовые сообщения
+        if not message.text:
+            await message.answer(
+                "❌ Пожалуйста, отправьте текстовое сообщение с потреблением (W).",
+                reply_markup=await CalculatorKB.power_input(),
+            )
+            return
+        
         try:
             power = float(message.text.replace(",", "."))
             if power <= 0:
@@ -1002,29 +1086,110 @@ class Client:
             model_line = await self.calculator_req.get_model_line_by_id(
                 model.model_line_id
             )
-            algo_data = await self.calculator_req.get_algorithm_data(
-                model_line.algorithm
-            )
-            coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
+            
+            coin_data = {}
+            coin_symbols = []
 
-            result = MiningCalculator.calculate_profitability(
-                hash_rate=model.hash_rate,
-                power_consumption=model.power_consumption,
-                electricity_price_rub=electricity_price,
-                coin_data={
-                    coin.symbol: {
+            if model.get_coin and model.get_coin.strip():
+                # Оптимизация: загружаем все монеты одним запросом вместо цикла
+                coin_symbols_list = [s.strip().upper() for s in model.get_coin.split(",")]
+                # Для Scrypt сразу добавляем DOGE, если есть LTC
+                if model_line.algorithm == Algorithm.SCRYPT and "LTC" in coin_symbols_list and "DOGE" not in coin_symbols_list:
+                    coin_symbols_list.append("DOGE")
+                
+                coins_dict = await self.coin_req.get_coins_by_symbols(coin_symbols_list)
+                
+                # Загружаем данные алгоритмов одним запросом
+                algorithms_set = {coin.algorithm for coin in coins_dict.values() if coin}
+                algo_data_dict = await self.calculator_req.get_algorithm_data_batch(algorithms_set)
+                
+                # Формируем список монет с данными алгоритмов
+                all_coins = []
+                for coin_symbol in coin_symbols_list:
+                    coin = coins_dict.get(coin_symbol)
+                    if coin:
+                        algo_data = algo_data_dict.get(coin.algorithm)
+                        if algo_data:
+                            all_coins.append({
+                                "symbol": coin_symbol,
+                                "coin": coin,
+                                "algo_data": algo_data
+                            })
+                
+                # Применяем фильтрацию монет согласно правилам
+                filtered_coins = await self._filter_coins_for_miner(model_line, all_coins)
+                
+                # Формируем coin_data из отфильтрованных монет
+                for coin_info in filtered_coins:
+                    coin_symbol = coin_info["symbol"]
+                    coin = coin_info["coin"]
+                    algo_data = coin_info["algo_data"]
+                    coin_data[coin_symbol] = {
+                        "price": coin.current_price_usd,
+                        "network_hashrate": algo_data.network_hashrate,
+                        "block_reward": algo_data.block_reward,
+                        "algorithm": coin.algorithm.value.lower(),
+                    }
+                    coin_symbols.append(coin_symbol)
+                
+                # Для Scrypt добавляем DOGE (если есть LTC) - DOGE уже загружен выше
+                if model_line.algorithm == Algorithm.SCRYPT and "LTC" in [c["symbol"] for c in filtered_coins]:
+                    doge_coin = coins_dict.get("DOGE")
+                    if doge_coin and "DOGE" not in coin_data:
+                        doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                        coin_data["DOGE"] = {
+                            "price": doge_coin.current_price_usd,
+                            "network_hashrate": doge_network_hashrate,
+                            "block_reward": 10000,
+                            "algorithm": model_line.algorithm.value.lower(),
+                        }
+                        coin_symbols.append("DOGE")
+            else:
+                algo_data = await self.calculator_req.get_algorithm_data(
+                    model_line.algorithm
+                )
+                coin = await self.coin_req.get_coin_by_symbol(
+                    algo_data.default_coin
+                )
+                if coin and algo_data:
+                    coin_data[coin.symbol] = {
                         "price": coin.current_price_usd,
                         "network_hashrate": algo_data.network_hashrate,
                         "block_reward": algo_data.block_reward,
                         "algorithm": model_line.algorithm.value.lower(),
                     }
-                },
+                    coin_symbols.append(coin.symbol)
+                    
+                    # Для Scrypt добавляем DOGE (если default_coin LTC)
+                    if model_line.algorithm == Algorithm.SCRYPT and coin.symbol == "LTC":
+                        doge_coin = await self.coin_req.get_coin_by_symbol("DOGE")
+                        if doge_coin:
+                            doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                            coin_data["DOGE"] = {
+                                "price": doge_coin.current_price_usd,
+                                "network_hashrate": doge_network_hashrate,
+                                "block_reward": 10000,
+                                "algorithm": model_line.algorithm.value.lower(),
+                            }
+                            coin_symbols.append("DOGE")
+
+            if not coin_symbols:
+                await call.message.edit_text("❌ Не удалось найти данные о монетах")
+                return
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate=model.hash_rate,
+                power_consumption=model.power_consumption,
+                electricity_price_rub=electricity_price,
+                coin_data=coin_data,
                 usd_to_rub=usd_to_rub,
-                algorithm=model_line.algorithm.value.lower(),  # Передаем алгоритм для правильной конвертации единиц
+                algorithm=model_line.algorithm.value.lower(),
             )
 
-            
-            text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
+            text = (
+                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
+            )
+            text += MiningCalculator.format_result(result, coin_symbols, usd_to_rub)
 
         else:
             algorithm = data["algorithm"]
@@ -1032,7 +1197,7 @@ class Client:
             power = data["power"]
 
             algo_data = await self.calculator_req.get_algorithm_data(algorithm)
-            coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
+            coin = await self.coin_req.get_coin_by_symbol(algo_data.default_coin)
 
             # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
             # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
@@ -1056,19 +1221,40 @@ class Client:
                 hashrate_unit_display = "TH/s"  # Для kHeavyHash в TH/s
             # Для SHA-256 остается TH/s
 
+            # Формируем coin_data
+            coin_data_input = {
+                coin.symbol: {
+                    "price": coin.current_price_usd,
+                    "network_hashrate": algo_data.network_hashrate,
+                    "block_reward": algo_data.block_reward,
+                    "algorithm": algorithm.value.lower(),
+                }
+            }
+            
+            # Для Scrypt добавляем DOGE (если default_coin LTC)
+            display_symbols = [coin.symbol]
+            if algorithm == Algorithm.SCRYPT and coin.symbol == "LTC":
+                doge_coin = await self.coin_req.get_coin_by_symbol("DOGE")
+                if doge_coin:
+                    # LTC и DOGE - это разные сети, поэтому у них разные network_hashrate
+                    # Для DOGE используем актуальное значение network_hashrate из capminer.ru тестов
+                    # DOGE network_hashrate: ~2,958,883 GH/s (не зависит от LTC network_hashrate)
+                    doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                    coin_data_input["DOGE"] = {
+                        "price": doge_coin.current_price_usd,
+                        "network_hashrate": doge_network_hashrate,  # Отдельный network_hashrate для DOGE
+                        "block_reward": 10000,  # Стандартный block_reward для DOGE
+                        "algorithm": algorithm.value.lower(),
+                    }
+                    display_symbols.append("DOGE")
+
             result = MiningCalculator.calculate_profitability(
                 hash_rate=hashrate,
                 power_consumption=power,
                 electricity_price_rub=electricity_price,
-                coin_data={
-                    coin.symbol: {
-                        "price": coin.current_price_usd,
-                        "network_hashrate": algo_data.network_hashrate,
-                        "block_reward": algo_data.block_reward,
-                        "algorithm": algorithm.value.lower(),
-                    }
-                },
+                coin_data=coin_data_input,
                 usd_to_rub=usd_to_rub,
+                algorithm=algorithm.value.lower()  # Передаем алгоритм
             )
 
             text = (
@@ -1076,11 +1262,9 @@ class Client:
                 f"⚡ **Хэшрейт:** {hashrate_display} {hashrate_unit_display}\n"
                 f"🔌 **Мощность:** {power}W\n\n"
             )
-            text = MiningCalculator.format_result(result, [coin.symbol], usd_to_rub)
+            text += MiningCalculator.format_result(result, display_symbols, usd_to_rub)
 
-        await call.message.edit_text(
-            text, reply_markup=await CalculatorKB.result_menu()
-        )
+        await call.message.edit_text(text, reply_markup=await CalculatorKB.result_menu())
 
     async def back_chars_lines_handler(
         self, call: types.CallbackQuery, state: FSMContext
@@ -1118,30 +1302,107 @@ class Client:
             model_line = await self.calculator_req.get_model_line_by_id(
                 model.model_line_id
             )
-            algo_data = await self.calculator_req.get_algorithm_data(
-                model_line.algorithm
-            )
-            coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
+            
+            coin_data = {}
+            coin_symbols = []
 
-            result = MiningCalculator.calculate_profitability(
-                hash_rate=model.hash_rate,
-                power_consumption=model.power_consumption,
-                electricity_price_rub=electricity_price,
-                coin_data={
-                    coin.symbol: {
+            if model.get_coin and model.get_coin.strip():
+                # Оптимизация: загружаем все монеты одним запросом вместо цикла
+                coin_symbols_list = [s.strip().upper() for s in model.get_coin.split(",")]
+                # Для Scrypt сразу добавляем DOGE, если есть LTC
+                if model_line.algorithm == Algorithm.SCRYPT and "LTC" in coin_symbols_list and "DOGE" not in coin_symbols_list:
+                    coin_symbols_list.append("DOGE")
+                
+                coins_dict = await self.coin_req.get_coins_by_symbols(coin_symbols_list)
+                
+                # Загружаем данные алгоритмов одним запросом
+                algorithms_set = {coin.algorithm for coin in coins_dict.values() if coin}
+                algo_data_dict = await self.calculator_req.get_algorithm_data_batch(algorithms_set)
+                
+                # Формируем список монет с данными алгоритмов
+                all_coins = []
+                for coin_symbol in coin_symbols_list:
+                    coin = coins_dict.get(coin_symbol)
+                    if coin:
+                        algo_data = algo_data_dict.get(coin.algorithm)
+                        if algo_data:
+                            all_coins.append({
+                                "symbol": coin_symbol,
+                                "coin": coin,
+                                "algo_data": algo_data
+                            })
+                
+                # Применяем фильтрацию монет согласно правилам
+                filtered_coins = await self._filter_coins_for_miner(model_line, all_coins)
+                
+                # Формируем coin_data из отфильтрованных монет
+                for coin_info in filtered_coins:
+                    coin_symbol = coin_info["symbol"]
+                    coin = coin_info["coin"]
+                    algo_data = coin_info["algo_data"]
+                    coin_data[coin_symbol] = {
+                        "price": coin.current_price_usd,
+                        "network_hashrate": algo_data.network_hashrate,
+                        "block_reward": algo_data.block_reward,
+                        "algorithm": coin.algorithm.value.lower(),
+                    }
+                    coin_symbols.append(coin_symbol)
+                
+                # Для Scrypt добавляем DOGE (если есть LTC) - DOGE уже загружен выше
+                if model_line.algorithm == Algorithm.SCRYPT and "LTC" in [c["symbol"] for c in filtered_coins]:
+                    doge_coin = coins_dict.get("DOGE")
+                    if doge_coin and "DOGE" not in coin_data:
+                        doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                        coin_data["DOGE"] = {
+                            "price": doge_coin.current_price_usd,
+                            "network_hashrate": doge_network_hashrate,
+                            "block_reward": 10000,
+                            "algorithm": model_line.algorithm.value.lower(),
+                        }
+                        coin_symbols.append("DOGE")
+            else:
+                algo_data = await self.calculator_req.get_algorithm_data(
+                    model_line.algorithm
+                )
+                coin = await self.coin_req.get_coin_by_symbol(
+                    algo_data.default_coin
+                )
+                if coin and algo_data:
+                    coin_data[coin.symbol] = {
                         "price": coin.current_price_usd,
                         "network_hashrate": algo_data.network_hashrate,
                         "block_reward": algo_data.block_reward,
                         "algorithm": model_line.algorithm.value.lower(),
                     }
-                },
+                    coin_symbols.append(coin.symbol)
+                    
+                    # Для Scrypt добавляем DOGE (если default_coin LTC)
+                    if model_line.algorithm == Algorithm.SCRYPT and coin.symbol == "LTC":
+                        doge_coin = await self.coin_req.get_coin_by_symbol("DOGE")
+                        if doge_coin:
+                            doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                            coin_data["DOGE"] = {
+                                "price": doge_coin.current_price_usd,
+                                "network_hashrate": doge_network_hashrate,
+                                "block_reward": 10000,
+                                "algorithm": model_line.algorithm.value.lower(),
+                            }
+                            coin_symbols.append("DOGE")
+
+            result = MiningCalculator.calculate_profitability(
+                hash_rate=model.hash_rate,
+                power_consumption=model.power_consumption,
+                electricity_price_rub=electricity_price,
+                coin_data=coin_data,
                 usd_to_rub=usd_to_rub,
-                algorithm=model_line.algorithm.value.lower(),  # Передаем алгоритм для правильной конвертации единиц
+                algorithm=model_line.algorithm.value.lower(),
             )
 
-            
+            text = (
+                f"🔧 **Оборудование:** {model_line.manufacturer.value} {model.name}\n"
+            )
             text += MiningCalculator.format_result_rub(
-                result, [coin.symbol], usd_to_rub
+                result, coin_symbols, usd_to_rub
             )
 
         else:
@@ -1150,7 +1411,7 @@ class Client:
             power = data["power"]
 
             algo_data = await self.calculator_req.get_algorithm_data(algorithm)
-            coin = await self.calculator_req.get_coin_by_symbol(algo_data.default_coin)
+            coin = await self.coin_req.get_coin_by_symbol(algo_data.default_coin)
 
             # ВАЖНО: Для Etchash хэшрейт должен быть в GH/s (как на capminer.ru)
             # Если пользователь ввел значение, думая что это TH/s, нужно конвертировать
@@ -1174,19 +1435,40 @@ class Client:
                 hashrate_unit_display = "TH/s"  # Для kHeavyHash в TH/s
             # Для SHA-256 остается TH/s
 
+            # Формируем coin_data
+            coin_data_input = {
+                coin.symbol: {
+                    "price": coin.current_price_usd,
+                    "network_hashrate": algo_data.network_hashrate,
+                    "block_reward": algo_data.block_reward,
+                    "algorithm": algorithm.value.lower(),
+                }
+            }
+            
+            # Для Scrypt добавляем DOGE (если default_coin LTC)
+            display_symbols = [coin.symbol]
+            if algorithm == Algorithm.SCRYPT and coin.symbol == "LTC":
+                doge_coin = await self.coin_req.get_coin_by_symbol("DOGE")
+                if doge_coin:
+                    # LTC и DOGE - это разные сети, поэтому у них разные network_hashrate
+                    # Для DOGE используем актуальное значение network_hashrate из capminer.ru тестов
+                    # DOGE network_hashrate: ~2,958,883 GH/s (не зависит от LTC network_hashrate)
+                    doge_network_hashrate = 2_958_883  # GH/s - актуальное значение для DOGE из capminer.ru
+                    coin_data_input["DOGE"] = {
+                        "price": doge_coin.current_price_usd,
+                        "network_hashrate": doge_network_hashrate,  # Отдельный network_hashrate для DOGE
+                        "block_reward": 10000,  # Стандартный block_reward для DOGE
+                        "algorithm": algorithm.value.lower(),
+                    }
+                    display_symbols.append("DOGE")
+
             result = MiningCalculator.calculate_profitability(
                 hash_rate=hashrate,
                 power_consumption=power,
                 electricity_price_rub=electricity_price,
-                coin_data={
-                    coin.symbol: {
-                        "price": coin.current_price_usd,
-                        "network_hashrate": algo_data.network_hashrate,
-                        "block_reward": algo_data.block_reward,
-                        "algorithm": algorithm.value.lower(),
-                    }
-                },
+                coin_data=coin_data_input,
                 usd_to_rub=usd_to_rub,
+                algorithm=algorithm.value.lower()  # Передаем алгоритм
             )
 
             text = (
@@ -1195,7 +1477,7 @@ class Client:
                 f"🔌 **Мощность:** {power}W\n\n"
             )
             text += MiningCalculator.format_result_rub(
-                result, [coin.symbol], usd_to_rub
+                result, display_symbols, usd_to_rub
             )
 
         await call.message.edit_text(
@@ -1262,6 +1544,29 @@ class Client:
             pass
 
     async def calc_hashrate_handler(self, message: types.Message, state: FSMContext):
+        # Проверка типа данных - только текстовые сообщения
+        if not message.text:
+            data = await state.get_data()
+            algorithm = data.get("algorithm")
+            hashrate_unit = "TH/s"  # По умолчанию
+            
+            if algorithm:
+                algorithm_lower = algorithm.value.lower()
+                if algorithm_lower in ["sha-256", "sha256"]:
+                    hashrate_unit = "TH/s"
+                elif algorithm_lower in ["scrypt", "etchash", "ethash", "etchash/ethash", "blake2b+sha3", "blake2b_sha3"]:
+                    hashrate_unit = "GH/s"
+                elif algorithm_lower in ["blake2s"]:
+                    hashrate_unit = "TH/s"
+                elif algorithm_lower in ["kheavyhash"]:
+                    hashrate_unit = "TH/s"
+            
+            await message.answer(
+                f"❌ Пожалуйста, отправьте текстовое сообщение с хешрейтом ({hashrate_unit}).",
+                reply_markup=await CalculatorKB.hashrate_input(),
+            )
+            return
+        
         try:
             hashrate = float(message.text.replace(",", "."))
             if hashrate <= 0:
@@ -1348,7 +1653,7 @@ class Client:
 
     async def sell_device_handler(self, message: types.Message, state: FSMContext):
         # Проверка типа данных - только текстовые сообщения
-        if not hasattr(message, 'text') or not message.text:
+        if not message.text:
             await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с моделью устройства.")
             return
         
@@ -1368,9 +1673,17 @@ class Client:
             await message.answer("❌ Модель устройства слишком длинная (максимум 200 символов). Введите короче:")
             return
         
-        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
-        if not any(c.isalnum() for c in device_text):
-            await message.answer("❌ Модель устройства должна содержать хотя бы одну букву или цифру. Введите корректную модель:")
+        # Проверка на валидность: подсчитываем количество букв и цифр
+        alnum_count = sum(1 for c in device_text if c.isalnum())
+        total_length = len(device_text)
+        
+        # Должно быть хотя бы 50% букв/цифр (или минимум 2 символа для коротких строк)
+        min_alnum = max(2, total_length // 2)
+        if alnum_count < min_alnum:
+            await message.answer(
+                f"❌ Модель устройства содержит слишком много специальных символов. "
+                f"Введите корректную модель устройства (буквы, цифры, дефисы, пробелы)."
+            )
             return
         
         await state.update_data(device=device_text)
@@ -1379,29 +1692,27 @@ class Client:
 
     async def sell_price_handler(self, message: types.Message, state: FSMContext):
         # Проверка типа данных - только текстовые сообщения
-        if not hasattr(message, 'text') or not message.text:
+        if not message.text:
             await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с ценой.")
             return
         
         # Проверка на пустое сообщение
-        price_text = message.text.strip()
+        price_text = message.text.strip().replace(" ", "").replace(",", ".")
         if not price_text:
             await message.answer("❌ Цена не может быть пустой. Введите цену продажи (в рублях):")
             return
         
-        # Проверка, что строка состоит только из цифр (после удаления пробелов)
-        if not price_text.replace(" ", "").isdigit():
-            await message.answer("❌ Введите корректную цену (только цифры, без букв и символов):")
-            return
-        
-        # Проверка, что это число
+        # Проверка, что это число (целое или десятичное)
         try:
-            price = int(price_text)
+            price = float(price_text)
             if price <= 0:
-                await message.answer("❌ Цена должна быть больше нуля. Введите корректную цену:")
+                await message.answer("❌ Цена должна быть больше нуля. Введите корректную цену (например: 50000 или 50000.50):")
+                return
+            if price > 1e9:  # Проверка на разумный максимум (1 миллиард)
+                await message.answer("❌ Цена слишком большая. Введите корректную цену (максимум 1 000 000 000):")
                 return
         except ValueError:
-            await message.answer("❌ Введите корректную цену (целое число больше нуля):")
+            await message.answer("❌ Введите корректную цену (число, например: 50000 или 50000.50):")
             return
 
         await state.update_data(price=price)
@@ -1412,7 +1723,7 @@ class Client:
 
     async def sell_condition_handler(self, message: types.Message, state: FSMContext):
         # Проверка типа данных - только текстовые сообщения
-        if not hasattr(message, 'text') or not message.text:
+        if not message.text:
             await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с описанием состояния.")
             return
         
@@ -1432,9 +1743,17 @@ class Client:
             await message.answer("❌ Описание состояния слишком длинное (максимум 500 символов). Введите короче:")
             return
         
-        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
-        if not any(c.isalnum() for c in condition_text):
-            await message.answer("❌ Описание состояния должно содержать хотя бы одну букву или цифру. Опишите состояние устройства:")
+        # Проверка на валидность: подсчитываем количество букв и цифр
+        alnum_count = sum(1 for c in condition_text if c.isalnum())
+        total_length = len(condition_text)
+        
+        # Должно быть хотя бы 40% букв/цифр (или минимум 3 символа для коротких строк)
+        min_alnum = max(3, total_length * 2 // 5)
+        if alnum_count < min_alnum:
+            await message.answer(
+                f"❌ Описание состояния содержит слишком много специальных символов. "
+                f"Опишите состояние устройства на русском или английском языке."
+            )
             return
         
         await state.update_data(condition=condition_text)
@@ -1443,7 +1762,7 @@ class Client:
 
     async def sell_description_handler(self, message: types.Message, state: FSMContext):
         # Проверка типа данных - только текстовые сообщения
-        if not hasattr(message, 'text') or not message.text:
+        if not message.text:
             await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с описанием.")
             return
         
@@ -1463,9 +1782,17 @@ class Client:
             await message.answer("❌ Описание слишком длинное (максимум 1000 символов). Введите короче:")
             return
         
-        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
-        if not any(c.isalnum() for c in description_text):
-            await message.answer("❌ Описание должно содержать хотя бы одну букву или цифру. Добавьте описание:")
+        # Проверка на валидность: подсчитываем количество букв и цифр
+        alnum_count = sum(1 for c in description_text if c.isalnum())
+        total_length = len(description_text)
+        
+        # Должно быть хотя бы 40% букв/цифр (или минимум 3 символа для коротких строк)
+        min_alnum = max(3, total_length * 2 // 5)
+        if alnum_count < min_alnum:
+            await message.answer(
+                f"❌ Описание содержит слишком много специальных символов. "
+                f"Добавьте описание на русском или английском языке."
+            )
             return
         
         await state.update_data(description=description_text)
@@ -1476,7 +1803,7 @@ class Client:
 
     async def sell_contact_handler(self, message: types.Message, state: FSMContext):
         # Проверка типа данных - только текстовые сообщения
-        if not hasattr(message, 'text') or not message.text:
+        if not message.text:
             await message.answer("❌ Пожалуйста, отправьте текстовое сообщение с контактами.")
             return
         
@@ -1496,9 +1823,17 @@ class Client:
             await message.answer("❌ Контакты слишком длинные (максимум 200 символов). Введите короче:")
             return
         
-        # Проверка на валидность: должна содержать хотя бы одну букву или цифру
-        if not any(c.isalnum() for c in contact_text):
-            await message.answer("❌ Контакты должны содержать хотя бы одну букву или цифру. Укажите контакты для связи:")
+        # Проверка на валидность: подсчитываем количество букв и цифр
+        alnum_count = sum(1 for c in contact_text if c.isalnum())
+        total_length = len(contact_text)
+        
+        # Должно быть хотя бы 50% букв/цифр (или минимум 2 символа для коротких строк)
+        min_alnum = max(2, total_length // 2)
+        if alnum_count < min_alnum:
+            await message.answer(
+                f"❌ Контакты содержат слишком много специальных символов. "
+                f"Укажите корректные контакты (телефон, Telegram, email и т.д.)."
+            )
             return
         
         await state.update_data(contact=contact_text)
@@ -1530,16 +1865,32 @@ class Client:
         
         # Проверка, что все поля заполнены и валидны
         validation_errors = []
-        if not device or len(device) < 2 or not any(c.isalnum() for c in device):
+        if not device or len(device) < 2:
             validation_errors.append("модель устройства")
-        if not price or price <= 0:
+        else:
+            alnum_count = sum(1 for c in device if c.isalnum())
+            if alnum_count < max(2, len(device) // 2):
+                validation_errors.append("модель устройства")
+        if not price or not isinstance(price, (int, float)) or price <= 0:
             validation_errors.append("цена")
-        if not condition or len(condition) < 3 or not any(c.isalnum() for c in condition):
+        if not condition or len(condition) < 3:
             validation_errors.append("состояние устройства")
-        if not description or len(description) < 3 or not any(c.isalnum() for c in description):
+        else:
+            alnum_count = sum(1 for c in condition if c.isalnum())
+            if alnum_count < max(3, len(condition) * 2 // 5):
+                validation_errors.append("состояние устройства")
+        if not description or len(description) < 3:
             validation_errors.append("описание")
-        if not contact or len(contact) < 3 or not any(c.isalnum() for c in contact):
+        else:
+            alnum_count = sum(1 for c in description if c.isalnum())
+            if alnum_count < max(3, len(description) * 2 // 5):
+                validation_errors.append("описание")
+        if not contact or len(contact) < 3:
             validation_errors.append("контакты")
+        else:
+            alnum_count = sum(1 for c in contact if c.isalnum())
+            if alnum_count < max(2, len(contact) // 2):
+                validation_errors.append("контакты")
         
         if validation_errors:
             await message.answer(
@@ -1551,7 +1902,12 @@ class Client:
         
         try:
             escaped_device = escape_html(device)
-            escaped_price = escape_html(str(price))
+            # Форматируем цену: если целое число, показываем без десятичных, иначе с 2 знаками
+            if isinstance(price, float) and price.is_integer():
+                price_str = str(int(price))
+            else:
+                price_str = f"{price:.2f}".rstrip('0').rstrip('.')
+            escaped_price = escape_html(price_str)
             escaped_condition = escape_html(condition)
             escaped_description = escape_html(description)
             escaped_contact = escape_html(contact)

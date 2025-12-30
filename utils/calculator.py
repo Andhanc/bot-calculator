@@ -27,7 +27,7 @@ class MiningCalculator:
         if algorithm_lower in ["sha-256", "sha256"]:
             params.update({"hashrate_unit": "th/s", "block_time": 600})
         elif algorithm_lower in ["scrypt"]:
-            params.update({"hashrate_unit": "mh/s", "block_time": 150})
+            params.update({"hashrate_unit": "gh/s", "block_time": 150})  # Для scrypt network_hashrate в БД в GH/s, пользователь вводит в GH/s
         elif algorithm_lower in ["etchash", "ethash", "etchash/ethash"]:
             params.update({"hashrate_unit": "gh/s", "block_time": 13})  # На capminer.ru для Etchash используется GH/s
         elif algorithm_lower in ["kheavyhash"]:
@@ -162,29 +162,67 @@ class MiningCalculator:
             miner_hash = hash_rate  # Уже в TH/s
             # network_hash уже в TH/s, не конвертируем
         
-        # ШАГ 1: Рассчитываем долю майнера (единицы должны совпадать!)
-        share = miner_hash / network_hash if network_hash > 0 else 0
-
-        # ШАГ 2: Блоков в день
-        block_time = info.get("block_time", algo_params["block_time"])
+        # ШАГ 2-6: Расчет для каждой монеты отдельно (важно для Scrypt, где LTC и DOGE имеют разные block_time и network_hashrate)
+        # Для Scrypt: LTC имеет block_time=150 сек, DOGE имеет block_time=60 сек
+        # У них также РАЗНЫЕ network_hashrate, так как это разные сети!
+        daily_coins_per_coin = {}
+        daily_income_usd_per_coin = {}
+        daily_income_rub_per_coin = {}
+        total_daily_income_usd = 0.0
+        total_daily_income_rub = 0.0
         
-        if algorithm.lower() == "kheavyhash":
-            blocks_per_day = 86400  # 1 блок в секунду
+        # Определяем block_time по умолчанию для алгоритма
+        default_block_time = algo_params["block_time"]
+        
+        # Для Scrypt: LTC=150, DOGE=60
+        if algorithm.lower() == "scrypt":
+            scrypt_block_times = {
+                "LTC": 150,
+                "DOGE": 60
+            }
         else:
-            blocks_per_day = 86400 / block_time
+            scrypt_block_times = {}
+        
+        for symbol, coin_info in coin_data.items():
+            # ШАГ 1: Рассчитываем долю майнера для ЭТОЙ конкретной монеты (с её network_hashrate!)
+            coin_network_hash = coin_info["network_hashrate"]
+            share = miner_hash / coin_network_hash if coin_network_hash > 0 else 0
+            
+            # Определяем block_time для конкретной монеты
+            if symbol in scrypt_block_times:
+                block_time = scrypt_block_times[symbol]
+            else:
+                block_time = coin_info.get("block_time", default_block_time)
+            
+            # ШАГ 2: Блоков в день
+            if algorithm.lower() == "kheavyhash":
+                blocks_per_day = 86400  # 1 блок в секунду
+            else:
+                blocks_per_day = 86400 / block_time
 
-        # ШАГ 3: Расчет количества монет в день (БЕЗ комиссии пула)
-        daily_coins_without_fee = share * blocks_per_day * info["block_reward"]
+            # ШАГ 3: Расчет количества монет в день (БЕЗ комиссии пула)
+            daily_coins_without_fee = share * blocks_per_day * coin_info["block_reward"]
+            
+            # ШАГ 4: Применяем комиссию пула (если указана)
+            if pool_fee > 0:
+                daily_coins = daily_coins_without_fee * (1 - pool_fee)
+            else:
+                daily_coins = daily_coins_without_fee
+            
+            daily_coins_per_coin[symbol] = daily_coins
+            
+            # ШАГ 5 и 6: Расчет дохода для этой монеты
+            coin_income_usd = daily_coins * coin_info["price"]
+            coin_income_rub = coin_income_usd * usd_to_rub
+            
+            daily_income_usd_per_coin[symbol] = coin_income_usd
+            daily_income_rub_per_coin[symbol] = coin_income_rub
+            total_daily_income_usd += coin_income_usd
+            total_daily_income_rub += coin_income_rub
         
-        # ШАГ 4: Применяем комиссию пула (если указана)
-        if pool_fee > 0:
-            daily_coins = daily_coins_without_fee * (1 - pool_fee)
-        else:
-            daily_coins = daily_coins_without_fee
-        
-        # ШАГ 5 и 6: Расчет дохода
-        daily_income_usd = daily_coins * info["price"]
-        daily_income_rub = daily_income_usd * usd_to_rub
+        # Для обратной совместимости используем первую монету для общих показателей
+        daily_income_usd = total_daily_income_usd
+        daily_income_rub = total_daily_income_rub
         
         # Расчет затрат на электроэнергию
         # Если указана цена в USD, используем её, иначе конвертируем из рублей
@@ -201,13 +239,18 @@ class MiningCalculator:
 
         def make_period(multiplier: int) -> Dict[str, Any]:
             coins_per_coin = {}
-            # Используем daily_coins напрямую для всех монет (количество монет одинаково)
-            # daily_coins уже рассчитано на основе доли майнера и награды за блок
+            income_usd_per_coin = {}
+            income_rub_per_coin = {}
+            # Используем daily_coins_per_coin для каждой монеты отдельно
             for symbol in coin_data.keys():
-                coins = daily_coins * multiplier
+                coins = daily_coins_per_coin.get(symbol, 0) * multiplier
                 coins_per_coin[symbol] = coins
+                income_usd_per_coin[symbol] = daily_income_usd_per_coin.get(symbol, 0) * multiplier
+                income_rub_per_coin[symbol] = daily_income_rub_per_coin.get(symbol, 0) * multiplier
             return {
                 "coins_per_coin": coins_per_coin,
+                "income_usd_per_coin": income_usd_per_coin,
+                "income_rub_per_coin": income_rub_per_coin,
                 "income_usd": daily_income_usd * multiplier,
                 "income_rub": daily_income_rub * multiplier,
                 "electricity_cost_usd": daily_electricity_cost_usd * multiplier,
@@ -219,6 +262,8 @@ class MiningCalculator:
         return {
             "daily_income_usd": daily_income_usd,
             "daily_income_rub": daily_income_rub,
+            "daily_income_usd_per_coin": daily_income_usd_per_coin,
+            "daily_income_rub_per_coin": daily_income_rub_per_coin,
             "daily_electricity_cost_usd": daily_electricity_cost_usd,
             "daily_electricity_cost_rub": daily_electricity_cost_rub,
             "daily_profit_usd": daily_profit_usd,
@@ -290,15 +335,33 @@ class MiningCalculator:
             ("month", "месяц"),
             ("year", "год"),
         ]:
-            val = result["periods"][period]["income_usd"]
-            if val == 0:
-                text += f"— За {name}: $0.00\n"
-            elif val < 0.01:
-                text += f"— За {name}: ${val:.4f}\n"
-            elif val < 1:
-                text += f"— За {name}: ${val:.3f}\n"
+            # Если есть доход по каждой монете отдельно, показываем их раздельно
+            income_per_coin = result["periods"][period].get("income_usd_per_coin", {})
+            if income_per_coin and len(display_coins) > 1:
+                # Показываем доход отдельно для каждой монеты
+                income_strings = []
+                for symbol in display_coins:
+                    coin_income = income_per_coin.get(symbol, 0)
+                    if coin_income == 0:
+                        income_strings.append(f"$0.00 ({symbol})")
+                    elif coin_income < 0.01:
+                        income_strings.append(f"${coin_income:.4f} ({symbol})")
+                    elif coin_income < 1:
+                        income_strings.append(f"${coin_income:.3f} ({symbol})")
+                    else:
+                        income_strings.append(f"${coin_income:.2f} ({symbol})")
+                text += f"— За {name}: {' | '.join(income_strings)}\n"
             else:
-                text += f"— За {name}: ${val:.2f}\n"
+                # Если нет раздельного дохода, показываем общий (для обратной совместимости)
+                val = result["periods"][period]["income_usd"]
+                if val == 0:
+                    text += f"— За {name}: $0.00\n"
+                elif val < 0.01:
+                    text += f"— За {name}: ${val:.4f}\n"
+                elif val < 1:
+                    text += f"— За {name}: ${val:.3f}\n"
+                else:
+                    text += f"— За {name}: ${val:.2f}\n"
 
         text += "\n⚡ **Затраты на электроэнергию:**\n"
         for period, name in [
@@ -317,15 +380,34 @@ class MiningCalculator:
             ("month", "месяц"),
             ("year", "год"),
         ]:
-            val = result["periods"][period]["profit_usd"]
-            if val == 0:
+            # Прибыль - это общий доход минус затраты (затраты общие для всех монет)
+            total_profit = result["periods"][period]["profit_usd"]
+            if total_profit == 0:
                 text += f"— За {name}: $0.00\n"
-            elif abs(val) < 0.01:
-                text += f"— За {name}: ${val:.4f}\n"
-            elif abs(val) < 1:
-                text += f"— За {name}: ${val:.3f}\n"
+            elif abs(total_profit) < 0.01:
+                text += f"— За {name}: ${total_profit:.4f}\n"
+            elif abs(total_profit) < 1:
+                text += f"— За {name}: ${total_profit:.3f}\n"
             else:
-                text += f"— За {name}: ${val:.2f}\n"
+                text += f"— За {name}: ${total_profit:.2f}\n"
+
+        # Итоговые суммы (если несколько монет)
+        if len(display_coins) > 1:
+            text += "\n📊 **ИТОГО (сумма со всех монет):**\n"
+            for period, name in [
+                ("day", "день"),
+                ("week", "неделю"),
+                ("month", "месяц"),
+                ("year", "год"),
+            ]:
+                total_income = result["periods"][period]["income_usd"]
+                total_electricity = result["periods"][period]["electricity_cost_usd"]
+                total_profit = result["periods"][period]["profit_usd"]
+                
+                text += f"— За {name}:\n"
+                text += f"  💵 Доход: ${total_income:.2f}\n"
+                text += f"  ⚡ Затраты: ${total_electricity:.2f}\n"
+                text += f"  💰 Прибыль: ${total_profit:.2f}\n"
 
         text += f"\n🕒 *Доходность актуальна на {datetime.now().strftime('%d.%m.%Y %H:%M')}*"
 
