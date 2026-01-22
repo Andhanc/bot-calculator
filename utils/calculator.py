@@ -253,8 +253,7 @@ class MiningCalculator:
         text = ""
         text += f"💰 **Криптовалюта:** {', '.join(display_coins)}\n"
         
-        text += f"🔌 **Потребление:** {result['power_consumption']:.1f}W\n"
-        text += f"🔄 **Курс доллара:** {usd_to_rub:.2f} RUB\n\n"
+        text += f"🔌 **Потребление:** {result['power_consumption']:.1f}W\n\n"
 
         if not result["periods"]["day"]["coins_per_coin"]:
             text += "❌ Не удалось рассчитать доходность для указанных монет\n"

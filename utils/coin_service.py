@@ -101,7 +101,6 @@ class CoinGeckoService:
 
             # Сообщение в том же формате, что и в меню "Цены монет"
             message = "💎 Текущие цены монет:\n\n"
-            message += f"🔄 Курс доллара: 1 USDT ≈ {usd_to_rub:.2f} RUB\n\n"
 
             for coin in filtered_coins:
                 if coin.symbol in prices_data:

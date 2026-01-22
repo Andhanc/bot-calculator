@@ -467,7 +467,6 @@ class Client:
         sorted_coins = sorted(filtered_coins, key=lambda coin: priority_dict[coin.symbol])
 
         message = "💎 Текущие цены монет:\n\n"
-        message += f"🔄 Курс доллара: 1 USDT ≈ {usd_to_rub:.2f} RUB\n\n"
         for coin in sorted_coins:
             change_icon = "📈" if coin.price_change_24h >= 0 else "📉"
             message += (
