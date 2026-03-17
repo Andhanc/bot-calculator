@@ -13,7 +13,7 @@ from database.models import Algorithm, Manufacturer
 from keyboards.calculator_kb import CalculatorKB
 from keyboards.client_kb import ClientKB
 from signature import Settings
-from utils.ai_service import ask_ishushka
+from utils.ai_service import ask_ishushka, create_chat
 from utils.calculator import MiningCalculator
 from utils.coin_service import CoinGeckoService
 from utils.states import BetterPriceState, CalculatorState, FreeAiState, SellForm
@@ -590,6 +590,12 @@ class Client:
 
     async def ai_consult_start(self, call: types.CallbackQuery, state: FSMContext):
         await call.message.delete()
+        try:
+            conversation_id = await create_chat()
+            await state.update_data(ai_conversation_id=conversation_id)
+        except Exception as e:
+            print(f"Ошибка создания чата AI: {e}")
+            conversation_id = None
         await self.bot.send_message(
             call.from_user.id,
             "💬 Задайте ваш вопрос по майнингу:",
@@ -648,10 +654,30 @@ class Client:
         return context
 
     async def ai_chat_handler(self, message: types.Message, state: FSMContext):
-
+        data = await state.get_data()
+        conversation_id = data.get("ai_conversation_id")
+        if not conversation_id:
+            try:
+                conversation_id = await create_chat()
+                await state.update_data(ai_conversation_id=conversation_id)
+            except Exception as e:
+                print(f"Ошибка создания чата AI: {e}")
+                await message.answer(
+                    "Не удалось создать сессию. Попробуйте заново открыть раздел «ИИ-помощник».",
+                    reply_markup=await ClientKB.back_ai(),
+                )
+                return
         context = await self.prepare_ai_context()
-
-        response = await ask_ishushka("d0tSpMyO0f", message.text, context)
+        response = await ask_ishushka(conversation_id, message.text, context)
+        if response == "__SESSION_EXPIRED__":
+            try:
+                conversation_id = await create_chat()
+                await state.update_data(ai_conversation_id=conversation_id)
+                response = await ask_ishushka(conversation_id, message.text, context)
+            except Exception:
+                response = "Сессия истекла. Откройте заново раздел «ИИ-помощник»."
+            if response == "__SESSION_EXPIRED__":
+                response = "Сессия истекла. Откройте заново раздел «ИИ-помощник»."
         await message.answer(
             response, parse_mode=None, reply_markup=await ClientKB.back_ai()
         )
